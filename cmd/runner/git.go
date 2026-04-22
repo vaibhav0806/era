@@ -6,7 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 )
+
+// scrubSecrets masks GitHub PATs and tokenized URLs in error/log strings so
+// they don't leak into Telegram messages, the events table, or stdout.
+var (
+	tokenizedURLPat = regexp.MustCompile(`(https://x-access-token:)[^@]+@`)
+	classicPATPat   = regexp.MustCompile(`ghp_[A-Za-z0-9]{36,}`)
+	finePATPat      = regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`)
+)
+
+func scrubSecrets(s string) string {
+	s = tokenizedURLPat.ReplaceAllString(s, "$1***@")
+	s = classicPATPat.ReplaceAllString(s, "ghp_***")
+	s = finePATPat.ReplaceAllString(s, "github_pat_***")
+	return s
+}
 
 // errNoChanges means Pi ran but produced no diff. The driver surfaces this
 // as a non-fatal outcome (task "completed with no changes"), not a push.
@@ -67,7 +83,8 @@ func (g *gitDriver) runAt(ctx context.Context, dir, name string, args ...string)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s %v: %w\n%s", name, args, err, errBuf.String())
+		return fmt.Errorf("%s %v: %w\n%s",
+			name, scrubArgs(args), err, scrubSecrets(errBuf.String()))
 	}
 	return nil
 }
@@ -79,7 +96,16 @@ func (g *gitDriver) outputAt(ctx context.Context, dir, name string, args ...stri
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%s %v: %w\n%s", name, args, err, stderr.String())
+		return nil, fmt.Errorf("%s %v: %w\n%s",
+			name, scrubArgs(args), err, scrubSecrets(stderr.String()))
 	}
 	return stdout.Bytes(), nil
+}
+
+func scrubArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = scrubSecrets(a)
+	}
+	return out
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -16,6 +17,21 @@ import (
 	"github.com/vaibhav0806/era/internal/runner"
 	"github.com/vaibhav0806/era/internal/telegram"
 )
+
+// Defense-in-depth secret scrubbing at the Telegram boundary. The runner
+// already scrubs in cmd/runner/git.go; this catches anything that slips past.
+var (
+	tokenizedURLPat = regexp.MustCompile(`(https://x-access-token:)[^@]+@`)
+	classicPATPat   = regexp.MustCompile(`ghp_[A-Za-z0-9]{36,}`)
+	finePATPat      = regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`)
+)
+
+func scrubSecrets(s string) string {
+	s = tokenizedURLPat.ReplaceAllString(s, "$1***@")
+	s = classicPATPat.ReplaceAllString(s, "ghp_***")
+	s = finePATPat.ReplaceAllString(s, "github_pat_***")
+	return s
+}
 
 var version = "0.0.1-m0"
 
@@ -142,7 +158,7 @@ func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, branch, summ
 }
 
 func (n *tgNotifier) NotifyFailed(ctx context.Context, id int64, reason string) {
-	msg := fmt.Sprintf("task #%d failed: %s", id, reason)
+	msg := fmt.Sprintf("task #%d failed: %s", id, scrubSecrets(reason))
 	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
 		slog.Error("notify failed", "err", err, "task", id)
 	}
