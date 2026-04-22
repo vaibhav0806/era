@@ -26,3 +26,11 @@ run: build
 
 clean:
 	rm -rf bin/ *.db *.db-wal *.db-shm coverage.out
+
+BIN_RUNNER_LINUX := bin/era-runner-linux
+
+runner-linux:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o $(BIN_RUNNER_LINUX) ./cmd/runner
+
+docker-runner: runner-linux
+	docker build -t era-runner:m1 -f docker/runner/Dockerfile .
