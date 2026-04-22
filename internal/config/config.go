@@ -26,7 +26,7 @@ type Config struct {
 const (
 	defaultPiModel              = "moonshotai/kimi-k2.6"
 	defaultMaxTokensPerTask     = 500_000
-	defaultMaxCostCentsPerTask  = 50  // $0.50 USD
+	defaultMaxCostCentsPerTask  = 50 // $0.50 USD
 	defaultMaxIterationsPerTask = 30
 	defaultMaxWallClockSeconds  = 900 // 15 min
 )
