@@ -44,9 +44,9 @@ func TestCaps_IterationLimit(t *testing.T) {
 	defer cancel()
 	c := newCaps(ctx, runnerConfig{MaxTokens: 1_000_000_000, MaxCostCents: 10000, MaxIterations: 2, MaxWallSeconds: 60})
 
-	require.NoError(t, c.onEvent(&piEvent{Type: "tool_use_end"}))
-	require.NoError(t, c.onEvent(&piEvent{Type: "tool_use_end"}))
-	err := c.onEvent(&piEvent{Type: "tool_use_end"})
+	require.NoError(t, c.onEvent(&piEvent{Type: "tool_execution_end"}))
+	require.NoError(t, c.onEvent(&piEvent{Type: "tool_execution_end"}))
+	err := c.onEvent(&piEvent{Type: "tool_execution_end"})
 	require.ErrorIs(t, err, errCapExceeded)
 	require.Contains(t, err.Error(), "iterations")
 }
@@ -69,7 +69,7 @@ func TestCaps_ExposesRunningTotals(t *testing.T) {
 	c := newCaps(ctx, runnerConfig{MaxTokens: 1_000_000_000, MaxCostCents: 1_000_000_000, MaxIterations: 1_000_000_000, MaxWallSeconds: 60})
 
 	_ = c.onEvent(msgEnd(100, 0.05))
-	_ = c.onEvent(&piEvent{Type: "tool_use_end"})
+	_ = c.onEvent(&piEvent{Type: "tool_execution_end"})
 	tok, co, it := c.Totals()
 	require.Equal(t, int64(100), tok)
 	require.InDelta(t, 0.05, co, 1e-9)

@@ -52,13 +52,13 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	// sandbox; not a concern for M1.)
 	c := newCaps(ctx, *cfg)
 
-	p, err := newRealPi(ctx, cfg.PiModel, cfg.OpenRouterAPIKey, workspace)
+	p, err := newRealPi(ctx, cfg.PiModel, cfg.OpenRouterAPIKey, workspace, cfg.TaskDescription)
 	if err != nil {
 		return fmt.Errorf("pi spawn: %w", err)
 	}
 
 	slog.Info("running pi", "model", cfg.PiModel)
-	summary, piErr := runPi(ctx, p, cfg.TaskDescription, c)
+	summary, piErr := runPi(ctx, p, c)
 
 	// Even on error, record what we spent and try to push whatever Pi wrote
 	// so the branch is inspectable next morning.

@@ -43,7 +43,7 @@ func (c *caps) onEvent(e *piEvent) error {
 		if int(c.costUSD*100) > c.cfg.MaxCostCents {
 			return fmt.Errorf("%w: cost %.4f USD > %d cents", errCapExceeded, c.costUSD, c.cfg.MaxCostCents)
 		}
-	case "tool_use_end":
+	case "tool_execution_end":
 		c.iters++
 		if c.iters > c.cfg.MaxIterations {
 			return fmt.Errorf("%w: iterations %d > %d", errCapExceeded, c.iters, c.cfg.MaxIterations)

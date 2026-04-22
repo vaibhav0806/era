@@ -3,17 +3,18 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 )
 
-// piProcess abstracts the `pi --mode rpc` child process so we can fake it in
+// piProcess abstracts the `pi --mode json` child process so we can fake it in
 // unit tests. The real implementation is realPi.
+//
+// Pi --mode json takes the prompt as a positional CLI argument (set in
+// newRealPi), not via stdin. There is no Stdin() method.
 type piProcess interface {
-	Stdin() (io.Writer, error)
 	Stdout() (io.Reader, error)
 	Stderr() (io.Reader, error)
 	Start() error
@@ -32,11 +33,7 @@ type eventObserver interface {
 	onEvent(e *piEvent) error
 }
 
-func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (*runSummary, error) {
-	stdin, err := p.Stdin()
-	if err != nil {
-		return nil, fmt.Errorf("stdin: %w", err)
-	}
+func runPi(ctx context.Context, p piProcess, obs eventObserver) (*runSummary, error) {
 	stdout, err := p.Stdout()
 	if err != nil {
 		return nil, fmt.Errorf("stdout: %w", err)
@@ -47,8 +44,6 @@ func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (
 
 	// Watchdog: if the parent ctx is canceled (wall-clock cap or external
 	// shutdown), kill Pi so the scanner unblocks and we can return promptly.
-	// This is the only reliable wall-clock enforcement when Pi is blocked
-	// inside an LLM call and producing no events.
 	ctxDone := make(chan struct{})
 	defer close(ctxDone)
 	go func() {
@@ -58,13 +53,6 @@ func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (
 		case <-ctxDone:
 		}
 	}()
-
-	// Send the prompt command as a single JSONL line.
-	cmd := map[string]string{"type": "prompt", "prompt": prompt, "id": "era-1"}
-	b, _ := json.Marshal(cmd)
-	if _, err := fmt.Fprintf(stdin, "%s\n", b); err != nil {
-		return nil, fmt.Errorf("write prompt: %w", err)
-	}
 
 	// Stream events live — one per line — so the observer can abort mid-stream.
 	sc := bufio.NewScanner(stdout)
@@ -89,7 +77,7 @@ func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (
 		case "message_end":
 			summary.TotalTokens += e.Message.Usage.TotalTokens
 			summary.TotalCostUSD += e.Message.Usage.Cost.Total
-		case "tool_use_end":
+		case "tool_execution_end":
 			summary.ToolUseCount++
 		case "error":
 			_ = p.Abort()
@@ -107,11 +95,6 @@ func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (
 		return summary, fmt.Errorf("stream: %w", err)
 	}
 	if err := p.Wait(); err != nil {
-		// If ctx was canceled (wall-clock), surface that as the cap error
-		// rather than a generic "exit status 1" so the orchestrator's
-		// failure reason is informative. errCapExceeded is defined in
-		// caps.go (Task M1-7); for now it doesn't exist, so this branch
-		// can use a placeholder error and Task M1-7 will rewire it.
 		if ctx.Err() != nil {
 			return summary, fmt.Errorf("wall-clock cap fired during pi run: %w", ctx.Err())
 		}
@@ -123,27 +106,23 @@ func runPi(ctx context.Context, p piProcess, prompt string, obs eventObserver) (
 // realPi is a thin exec.Cmd wrapper that implements piProcess.
 type realPi struct {
 	cmd    *exec.Cmd
-	stdin  io.WriteCloser
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 }
 
-func newRealPi(ctx context.Context, model, apiKey, workdir string) (*realPi, error) {
+func newRealPi(ctx context.Context, model, apiKey, workdir, prompt string) (*realPi, error) {
 	cmd := exec.CommandContext(ctx, "pi",
-		"--mode", "rpc",
+		"--mode", "json",
 		"--provider", "openrouter",
 		"--model", model,
 		"--tools", "read,write,edit,grep,find,ls,bash",
+		prompt,
 	)
 	cmd.Dir = workdir // Pi uses process CWD as session CWD; pass explicitly.
 	cmd.Env = append(cmd.Environ(),
 		"OPENROUTER_API_KEY="+apiKey,
 		"PI_CODING_AGENT_DIR=/tmp/pi-state",
 	)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -152,10 +131,9 @@ func newRealPi(ctx context.Context, model, apiKey, workdir string) (*realPi, err
 	if err != nil {
 		return nil, err
 	}
-	return &realPi{cmd: cmd, stdin: stdin, stdout: stdout, stderr: stderr}, nil
+	return &realPi{cmd: cmd, stdout: stdout, stderr: stderr}, nil
 }
 
-func (r *realPi) Stdin() (io.Writer, error)  { return r.stdin, nil }
 func (r *realPi) Stdout() (io.Reader, error) { return r.stdout, nil }
 func (r *realPi) Stderr() (io.Reader, error) { return r.stderr, nil }
 func (r *realPi) Start() error               { return r.cmd.Start() }
