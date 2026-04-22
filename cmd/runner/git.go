@@ -52,7 +52,10 @@ func (g *gitDriver) CommitAndPush(ctx context.Context, workDir string) error {
 	if err := g.runAt(ctx, workDir, "git", "commit", "-m", g.CommitMsg); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
-	if err := g.runAt(ctx, workDir, "git", "push", "origin", g.BranchName); err != nil {
+	// Push using the explicit tokenized URL rather than `origin`. Pi's bash
+	// tool can mutate .git/config (e.g. `git remote set-url`); pushing to the
+	// URL we constructed ensures the PAT is always present.
+	if err := g.runAt(ctx, workDir, "git", "push", g.RemoteURL, g.BranchName); err != nil {
 		return fmt.Errorf("push: %w", err)
 	}
 	return nil
