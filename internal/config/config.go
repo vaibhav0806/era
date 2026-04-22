@@ -13,7 +13,23 @@ type Config struct {
 	GitHubPAT             string
 	GitHubSandboxRepo     string // "owner/repo"
 	DBPath                string
+
+	// M1 additions
+	OpenRouterAPIKey     string
+	PiModel              string // OpenRouter model id (e.g. "moonshotai/kimi-k2.6")
+	MaxTokensPerTask     int
+	MaxCostCentsPerTask  int
+	MaxIterationsPerTask int
+	MaxWallClockSeconds  int
 }
+
+const (
+	defaultPiModel              = "moonshotai/kimi-k2.6"
+	defaultMaxTokensPerTask     = 500_000
+	defaultMaxCostCentsPerTask  = 50  // $0.50 USD
+	defaultMaxIterationsPerTask = 30
+	defaultMaxWallClockSeconds  = 900 // 15 min
+)
 
 func Load() (*Config, error) {
 	c := &Config{
@@ -21,6 +37,7 @@ func Load() (*Config, error) {
 		GitHubPAT:         os.Getenv("PI_GITHUB_PAT"),
 		GitHubSandboxRepo: os.Getenv("PI_GITHUB_SANDBOX_REPO"),
 		DBPath:            os.Getenv("PI_DB_PATH"),
+		OpenRouterAPIKey:  os.Getenv("PI_OPENROUTER_API_KEY"),
 	}
 
 	if c.TelegramToken == "" {
@@ -35,6 +52,9 @@ func Load() (*Config, error) {
 	if c.DBPath == "" {
 		return nil, errors.New("PI_DB_PATH is required")
 	}
+	if c.OpenRouterAPIKey == "" {
+		return nil, errors.New("PI_OPENROUTER_API_KEY is required")
+	}
 
 	raw := os.Getenv("PI_TELEGRAM_ALLOWED_USER_ID")
 	if raw == "" {
@@ -46,5 +66,40 @@ func Load() (*Config, error) {
 	}
 	c.TelegramAllowedUserID = id
 
+	c.PiModel = defOrEnv("PI_MODEL", defaultPiModel)
+	if c.MaxTokensPerTask, err = intEnv("PI_MAX_TOKENS_PER_TASK", defaultMaxTokensPerTask); err != nil {
+		return nil, err
+	}
+	if c.MaxCostCentsPerTask, err = intEnv("PI_MAX_COST_CENTS_PER_TASK", defaultMaxCostCentsPerTask); err != nil {
+		return nil, err
+	}
+	if c.MaxIterationsPerTask, err = intEnv("PI_MAX_ITERATIONS_PER_TASK", defaultMaxIterationsPerTask); err != nil {
+		return nil, err
+	}
+	if c.MaxWallClockSeconds, err = intEnv("PI_MAX_WALL_CLOCK_SECONDS", defaultMaxWallClockSeconds); err != nil {
+		return nil, err
+	}
 	return c, nil
+}
+
+func defOrEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func intEnv(key string, def int) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def, nil
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be integer: %w", key, err)
+	}
+	if v <= 0 {
+		return 0, fmt.Errorf("%s must be positive, got %d", key, v)
+	}
+	return v, nil
 }
