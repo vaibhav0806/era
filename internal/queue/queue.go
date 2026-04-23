@@ -52,7 +52,7 @@ type NeedsReviewArgs struct {
 // fire-and-forget — the notifier is expected to log its own errors and
 // return promptly.
 type Notifier interface {
-	NotifyCompleted(ctx context.Context, taskID int64, branch, summary string, tokens int64, costCents int)
+	NotifyCompleted(ctx context.Context, taskID int64, repo, branch, summary string, tokens int64, costCents int)
 	NotifyFailed(ctx context.Context, taskID int64, reason string)
 	NotifyNeedsReview(ctx context.Context, args NeedsReviewArgs)
 }
@@ -213,7 +213,7 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 				CompareURL: compareURL,
 			})
 		} else {
-			q.notifier.NotifyCompleted(ctx, t.ID, branch, summary, tokens, costCents)
+			q.notifier.NotifyCompleted(ctx, t.ID, effectiveRepo, branch, summary, tokens, costCents)
 		}
 	}
 	return true, nil

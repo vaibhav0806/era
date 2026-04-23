@@ -166,6 +166,7 @@ func TestQueue_RunNext_NoTasks(t *testing.T) {
 
 type completedArgs struct {
 	ID        int64
+	Repo      string
 	Branch    string
 	Summary   string
 	Tokens    int64
@@ -192,8 +193,8 @@ type fakeNotifier struct {
 	needsReview []needsReviewArgs
 }
 
-func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, b, s string, t int64, c int) {
-	f.completed = append(f.completed, completedArgs{id, b, s, t, c})
+func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, repo, b, s string, t int64, c int) {
+	f.completed = append(f.completed, completedArgs{id, repo, b, s, t, c})
 }
 func (f *fakeNotifier) NotifyFailed(ctx context.Context, id int64, r string) {
 	f.failed = append(f.failed, failedArgs{id, r})

@@ -165,7 +165,10 @@ type tgNotifier struct {
 	repo   string // "owner/repo"
 }
 
-func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, branch, summary string, tokens int64, costCents int) {
+func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch, summary string, tokens int64, costCents int) {
+	if repo == "" {
+		repo = n.repo
+	}
 	var msg string
 	if branch == "" {
 		msg = fmt.Sprintf("task #%d: no changes\nsummary: %s\ntokens: %d  cost: $%.2f",
@@ -173,7 +176,7 @@ func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, branch, summ
 	} else {
 		msg = fmt.Sprintf(
 			"task #%d completed\nbranch: %s\nhttps://github.com/%s/tree/%s\nsummary: %s\ntokens: %d  cost: $%.2f",
-			id, branch, n.repo, branch, summary, tokens, float64(costCents)/100.0,
+			id, branch, repo, branch, summary, tokens, float64(costCents)/100.0,
 		)
 	}
 	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
