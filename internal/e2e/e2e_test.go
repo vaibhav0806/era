@@ -32,7 +32,7 @@ import (
 	"github.com/vaibhav0806/era/internal/runner"
 )
 
-const runnerImage = "era-runner:m1"
+const runnerImage = "era-runner:m2"
 
 func TestE2E_QueueToDockerToBranch(t *testing.T) {
 	pat := os.Getenv("PI_GITHUB_PAT")

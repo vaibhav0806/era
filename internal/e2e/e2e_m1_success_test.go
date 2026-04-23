@@ -18,7 +18,7 @@ import (
 	"github.com/vaibhav0806/era/internal/runner"
 )
 
-const m1RunnerImage = "era-runner:m1"
+const m1RunnerImage = "era-runner:m2"
 
 func TestE2E_M1_TinyCodingTask(t *testing.T) {
 	requireEnv(t, "PI_GITHUB_PAT", "PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY")

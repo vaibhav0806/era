@@ -32,5 +32,10 @@ BIN_RUNNER_LINUX := bin/era-runner-linux
 runner-linux:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o $(BIN_RUNNER_LINUX) ./cmd/runner
 
-docker-runner: runner-linux
-	docker build -t era-runner:m1 -f docker/runner/Dockerfile .
+BIN_SIDECAR_LINUX := bin/era-sidecar-linux
+
+sidecar-linux:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o $(BIN_SIDECAR_LINUX) ./cmd/sidecar
+
+docker-runner: runner-linux sidecar-linux
+	docker build -t era-runner:m2 -f docker/runner/Dockerfile .

@@ -31,7 +31,7 @@ func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
 	r := db.NewRepo(h)
 
 	d := &runner.Docker{
-		Image:            "era-runner:m1",
+		Image:            "era-runner:m2",
 		SandboxRepo:      os.Getenv("PI_GITHUB_SANDBOX_REPO"),
 		GitHubPAT:        os.Getenv("PI_GITHUB_PAT"),
 		OpenRouterAPIKey: os.Getenv("PI_OPENROUTER_API_KEY"),

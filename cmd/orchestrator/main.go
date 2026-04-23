@@ -59,7 +59,7 @@ func main() {
 	repo := db.NewRepo(handle)
 
 	docker := &runner.Docker{
-		Image:            "era-runner:m1",
+		Image:            "era-runner:m2",
 		SandboxRepo:      cfg.GitHubSandboxRepo,
 		GitHubPAT:        cfg.GitHubPAT,
 		OpenRouterAPIKey: cfg.OpenRouterAPIKey,
