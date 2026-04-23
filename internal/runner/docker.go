@@ -5,11 +5,11 @@ package runner
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -43,10 +43,10 @@ type RunInput struct {
 
 // RunOutput is the parsed result of a successful container run.
 type RunOutput struct {
-	Branch    string
-	Summary   string
-	Tokens    int64
-	CostCents int
+	Branch    string        `json:"branch"`
+	Summary   string        `json:"summary"`
+	Tokens    int64         `json:"tokens"`
+	CostCents int           `json:"cost_cents"`
 	Audits    []audit.Entry // sidecar AUDIT lines parsed from the combined log
 	RawLog    string
 }
@@ -125,38 +125,24 @@ func streamTo(mu *sync.Mutex, r io.Reader, w *strings.Builder, wg *sync.WaitGrou
 }
 
 // ParseResult scans a log stream for the first line of the form
-// "RESULT key=value key=value..." and returns a RunOutput.
+// "RESULT <json>" and returns a RunOutput.
 func ParseResult(r io.Reader) (*RunOutput, error) {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.HasPrefix(line, "RESULT ") {
 			continue
 		}
-		out := &RunOutput{}
-		for _, p := range strings.Fields(strings.TrimPrefix(line, "RESULT ")) {
-			kv := strings.SplitN(p, "=", 2)
-			if len(kv) != 2 {
-				continue
-			}
-			switch kv[0] {
-			case "branch":
-				out.Branch = kv[1]
-			case "summary":
-				out.Summary = kv[1]
-			case "tokens":
-				n, _ := strconv.ParseInt(kv[1], 10, 64)
-				out.Tokens = n
-			case "cost_cents":
-				n, _ := strconv.Atoi(kv[1])
-				out.CostCents = n
-			}
+		payload := strings.TrimPrefix(line, "RESULT ")
+		var out RunOutput
+		if err := json.Unmarshal([]byte(payload), &out); err != nil {
+			return nil, fmt.Errorf("parse RESULT json: %w; raw=%q", err, payload)
 		}
-		// no_changes path: branch="" but summary non-empty
-		if out.Branch != "" || out.Summary != "" {
-			return out, nil
-		}
+		return &out, nil
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("scan: %w", err)
 	}
 	return nil, ErrNoResult
 }
