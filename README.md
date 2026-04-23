@@ -1,6 +1,6 @@
 # era
 
-*Ephemeral runtime agent.*
+*ephemeral runtime agent.*
 
 A personal agent orchestrator that runs tasks via Telegram, executes them in disposable Docker containers, and reports back with a pushed git branch. See [FEATURE.md](./FEATURE.md) for the full vision and design principles.
 
