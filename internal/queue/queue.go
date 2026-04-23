@@ -376,17 +376,18 @@ func (q *Queue) HandleApproval(ctx context.Context, data string) (string, error)
 	}
 }
 
-// CancelTask transitions queued → cancelled. No-op on already-cancelled.
-// Running tasks cannot be cancelled in M3 (requires docker kill; deferred).
+// CancelTask transitions queued → cancelled (idempotent on already-cancelled).
+// Running tasks are killed via the ContainerKiller; the runner's goroutine
+// observes the kill error, checks WasKilled, and writes the terminal state.
 // Other states error.
 func (q *Queue) CancelTask(ctx context.Context, id int64) error {
-	task, err := q.repo.GetTask(ctx, id)
+	t, err := q.repo.GetTask(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get task: %w", err)
 	}
-	switch task.Status {
+	switch t.Status {
 	case "cancelled":
-		return nil
+		return nil // idempotent
 	case "queued":
 		if err := q.repo.SetStatus(ctx, id, "cancelled"); err != nil {
 			return fmt.Errorf("set status: %w", err)
@@ -394,9 +395,22 @@ func (q *Queue) CancelTask(ctx context.Context, id int64) error {
 		_ = q.repo.AppendEvent(ctx, id, "cancelled", "{}")
 		return nil
 	case "running":
-		return fmt.Errorf("running tasks cannot be cancelled (running task #%d will hit its wall-clock cap)", id)
+		name, ok := q.running.Get(id)
+		if !ok {
+			return fmt.Errorf("task #%d is running but container not registered yet, retry shortly", id)
+		}
+		if q.killer == nil {
+			return fmt.Errorf("no killer configured; cannot cancel running task")
+		}
+		q.running.MarkKilled(id) // flag BEFORE kill so the race is safe
+		if err := q.killer.Kill(ctx, name); err != nil {
+			return fmt.Errorf("docker kill: %w", err)
+		}
+		// Don't write status=cancelled here. RunNext observes the killed runner's
+		// error, checks WasKilled, and writes the terminal state itself.
+		return nil
 	default:
-		return fmt.Errorf("cannot cancel task in state %q", task.Status)
+		return fmt.Errorf("cannot cancel task in state %q", t.Status)
 	}
 }
 
