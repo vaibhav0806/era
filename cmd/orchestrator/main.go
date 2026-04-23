@@ -165,7 +165,7 @@ type tgNotifier struct {
 	repo   string // "owner/repo"
 }
 
-func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch, summary string, tokens int64, costCents int) {
+func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch, prURL, summary string, tokens int64, costCents int) {
 	if repo == "" {
 		repo = n.repo
 	}
@@ -175,8 +175,8 @@ func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch
 			id, truncateForTelegram(summary, 3500), tokens, float64(costCents)/100.0)
 	} else {
 		msg = fmt.Sprintf(
-			"task #%d completed\nbranch: %s\nhttps://github.com/%s/tree/%s\nsummary: %s\ntokens: %d  cost: $%.2f",
-			id, branch, repo, branch, truncateForTelegram(summary, 3500), tokens, float64(costCents)/100.0,
+			"task #%d completed\nbranch: %s\n%s\nsummary: %s\ntokens: %d  cost: $%.2f",
+			id, branch, prURL, truncateForTelegram(summary, 3500), tokens, float64(costCents)/100.0,
 		)
 	}
 	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
@@ -222,7 +222,7 @@ func formatNeedsReviewMessage(a queue.NeedsReviewArgs) string {
 		fmt.Fprintf(&b, "  • %s (%s): %s\n", f.Rule, f.Path, truncate(f.Message, 100))
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "compare: %s\n\n", a.CompareURL)
+	fmt.Fprintf(&b, "pr: %s\n\n", a.PRURL)
 	b.WriteString("diff preview:\n")
 	diffPreview := buildDiffPreview(a.Diffs, telegramMaxChars-b.Len()-200)
 	b.WriteString(diffPreview)

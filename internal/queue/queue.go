@@ -46,14 +46,14 @@ type NeedsReviewArgs struct {
 	CostCents  int
 	Findings   []diffscan.Finding
 	Diffs      []diffscan.FileDiff
-	CompareURL string // e.g. https://github.com/<repo>/compare/main...<branch>
+	PRURL string // was CompareURL; now PR html_url (or branch URL fallback when PR creation fails)
 }
 
 // Notifier is called by RunNext when a task finishes. All methods are
 // fire-and-forget — the notifier is expected to log its own errors and
 // return promptly.
 type Notifier interface {
-	NotifyCompleted(ctx context.Context, taskID int64, repo, branch, summary string, tokens int64, costCents int)
+	NotifyCompleted(ctx context.Context, taskID int64, repo, branch, prURL, summary string, tokens int64, costCents int)
 	NotifyFailed(ctx context.Context, taskID int64, reason string)
 	NotifyNeedsReview(ctx context.Context, args NeedsReviewArgs)
 }
@@ -213,17 +213,19 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 		if len(flaggedFindings) > 0 {
 			compareURL := fmt.Sprintf("https://github.com/%s/compare/main...%s", effectiveRepo, branch)
 			q.notifier.NotifyNeedsReview(ctx, NeedsReviewArgs{
-				TaskID:     t.ID,
-				Branch:     branch,
-				Summary:    summary,
-				Tokens:     tokens,
-				CostCents:  costCents,
-				Findings:   flaggedFindings,
-				Diffs:      flaggedDiffs,
-				CompareURL: compareURL,
+				TaskID:    t.ID,
+				Branch:    branch,
+				Summary:   summary,
+				Tokens:    tokens,
+				CostCents: costCents,
+				Findings:  flaggedFindings,
+				Diffs:     flaggedDiffs,
+				PRURL:     compareURL, // temp — V-5's wiring will feed the real PR URL here.
 			})
 		} else {
-			q.notifier.NotifyCompleted(ctx, t.ID, effectiveRepo, branch, summary, tokens, costCents)
+			q.notifier.NotifyCompleted(ctx, t.ID, effectiveRepo, branch,
+				fmt.Sprintf("https://github.com/%s/tree/%s", effectiveRepo, branch),
+				summary, tokens, costCents)
 		}
 	}
 	return true, nil

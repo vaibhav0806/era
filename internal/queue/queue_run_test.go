@@ -168,6 +168,7 @@ type completedArgs struct {
 	ID        int64
 	Repo      string
 	Branch    string
+	PRURL     string
 	Summary   string
 	Tokens    int64
 	CostCents int
@@ -185,6 +186,7 @@ type needsReviewArgs struct {
 	CostCents int
 	Findings  []diffscan.Finding
 	Diffs     []diffscan.FileDiff
+	PRURL     string
 }
 
 type fakeNotifier struct {
@@ -193,8 +195,8 @@ type fakeNotifier struct {
 	needsReview []needsReviewArgs
 }
 
-func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, repo, b, s string, t int64, c int) {
-	f.completed = append(f.completed, completedArgs{id, repo, b, s, t, c})
+func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, repo, b, prURL, s string, t int64, c int) {
+	f.completed = append(f.completed, completedArgs{id, repo, b, prURL, s, t, c})
 }
 func (f *fakeNotifier) NotifyFailed(ctx context.Context, id int64, r string) {
 	f.failed = append(f.failed, failedArgs{id, r})
@@ -208,6 +210,7 @@ func (f *fakeNotifier) NotifyNeedsReview(ctx context.Context, a queue.NeedsRevie
 		CostCents: a.CostCents,
 		Findings:  a.Findings,
 		Diffs:     a.Diffs,
+		PRURL:     a.PRURL,
 	})
 }
 
