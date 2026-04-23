@@ -12,9 +12,17 @@ import (
 	"github.com/vaibhav0806/era/internal/telegram"
 )
 
-// Runner is wired in Task 15; nil-safe for Phase C.
+// TokenSource yields a fresh (or cached-still-valid) installation token for
+// git operations. Implementations: *githubapp.Client (prod), fakeTokens (tests).
+// May be nil in Queue.tokens — RunNext passes "" to runner.Run in that case.
+type TokenSource interface {
+	InstallationToken(ctx context.Context) (string, error)
+}
+
+// Runner executes a task. ghToken is a per-task GitHub installation token
+// (or empty string if no TokenSource is configured).
 type Runner interface {
-	Run(ctx context.Context, taskID int64, description string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
+	Run(ctx context.Context, taskID int64, description string, ghToken string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
 // Notifier is called by RunNext when a task finishes. Both methods are
@@ -29,9 +37,12 @@ type Queue struct {
 	repo     *db.Repo
 	runner   Runner
 	notifier Notifier
+	tokens   TokenSource // may be nil
 }
 
-func New(repo *db.Repo, runner Runner) *Queue { return &Queue{repo: repo, runner: runner} }
+func New(repo *db.Repo, runner Runner, tokens TokenSource) *Queue {
+	return &Queue{repo: repo, runner: runner, tokens: tokens}
+}
 
 // SetNotifier attaches a Notifier to this Queue. Safe to call once at
 // startup; do not change mid-flight — RunNext reads the field without a lock.
@@ -90,7 +101,21 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 
 	_ = q.repo.AppendEvent(ctx, t.ID, "started", "{}")
 
-	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description)
+	var ghToken string
+	if q.tokens != nil {
+		tok, err := q.tokens.InstallationToken(ctx)
+		if err != nil {
+			_ = q.repo.AppendEvent(ctx, t.ID, "failed", quoteJSON("token mint: "+err.Error()))
+			_ = q.repo.FailTask(ctx, t.ID, "token mint: "+err.Error())
+			if q.notifier != nil {
+				q.notifier.NotifyFailed(ctx, t.ID, "token mint: "+err.Error())
+			}
+			return true, err
+		}
+		ghToken = tok
+	}
+
+	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken)
 	if runErr != nil {
 		_ = q.repo.AppendEvent(ctx, t.ID, "failed", quoteJSON(runErr.Error()))
 		if ferr := q.repo.FailTask(ctx, t.ID, runErr.Error()); ferr != nil {

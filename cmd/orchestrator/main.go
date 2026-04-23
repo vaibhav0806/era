@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/vaibhav0806/era/internal/config"
 	"github.com/vaibhav0806/era/internal/db"
+	"github.com/vaibhav0806/era/internal/githubapp"
 	"github.com/vaibhav0806/era/internal/queue"
 	"github.com/vaibhav0806/era/internal/runner"
 	"github.com/vaibhav0806/era/internal/telegram"
@@ -61,7 +63,6 @@ func main() {
 	docker := &runner.Docker{
 		Image:            "era-runner:m2",
 		SandboxRepo:      cfg.GitHubSandboxRepo,
-		GitHubPAT:        cfg.GitHubPAT,
 		OpenRouterAPIKey: cfg.OpenRouterAPIKey,
 		PiModel:          cfg.PiModel,
 		MaxTokens:        cfg.MaxTokensPerTask,
@@ -69,7 +70,26 @@ func main() {
 		MaxIterations:    cfg.MaxIterationsPerTask,
 		MaxWallSeconds:   cfg.MaxWallClockSeconds,
 	}
-	q := queue.New(repo, runner.QueueAdapter{D: docker})
+
+	var tokenSource queue.TokenSource
+	if cfg.GitHubAppConfigured() {
+		appClient, err := githubapp.New(githubapp.Config{
+			AppID:            cfg.GitHubAppID,
+			InstallationID:   cfg.GitHubAppInstallationID,
+			PrivateKeyBase64: cfg.GitHubAppPrivateKeyBase64,
+		})
+		if err != nil {
+			fail(fmt.Errorf("github app init: %w", err))
+		}
+		tokenSource = appClient
+		slog.Info("github app token source configured",
+			"app_id", cfg.GitHubAppID, "installation_id", cfg.GitHubAppInstallationID)
+	} else {
+		slog.Warn("github app not configured; falling back to PAT in .env (deprecated)")
+		tokenSource = staticTokenSource(cfg.GitHubPAT)
+	}
+
+	q := queue.New(repo, runner.QueueAdapter{D: docker}, tokenSource)
 
 	client, err := telegram.NewClient(cfg.TelegramToken, cfg.TelegramAllowedUserID)
 	if err != nil {
@@ -133,6 +153,18 @@ func main() {
 func fail(err error) {
 	fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 	os.Exit(1)
+}
+
+// staticTokenSource returns the same token on every call. Used during the
+// M2-25 transition window when GitHub App env vars are not set. M2-26 removes
+// the PAT fallback entirely.
+type staticTokenSource string
+
+func (s staticTokenSource) InstallationToken(ctx context.Context) (string, error) {
+	if s == "" {
+		return "", errors.New("neither PI_GITHUB_APP_* nor PI_GITHUB_PAT configured")
+	}
+	return string(s), nil
 }
 
 type tgNotifier struct {

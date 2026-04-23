@@ -94,3 +94,34 @@ func TestLoad_MissingOpenRouterKey(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "PI_OPENROUTER_API_KEY")
 }
+
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("PI_TELEGRAM_TOKEN", "tok")
+	t.Setenv("PI_TELEGRAM_ALLOWED_USER_ID", "12345")
+	t.Setenv("PI_GITHUB_PAT", "ghp_xxx")
+	t.Setenv("PI_GITHUB_SANDBOX_REPO", "vaibhavpandey/pi-agent-sandbox")
+	t.Setenv("PI_DB_PATH", "./test.db")
+	t.Setenv("PI_OPENROUTER_API_KEY", "sk-or-test")
+}
+
+func TestLoad_WithGitHubApp(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PI_GITHUB_APP_ID", "3475140")
+	t.Setenv("PI_GITHUB_APP_INSTALLATION_ID", "126365088")
+	t.Setenv("PI_GITHUB_APP_PRIVATE_KEY", "LS0tLS1CRUdJTiBSU0Eg...")
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, int64(3475140), cfg.GitHubAppID)
+	require.Equal(t, int64(126365088), cfg.GitHubAppInstallationID)
+	require.Equal(t, "LS0tLS1CRUdJTiBSU0Eg...", cfg.GitHubAppPrivateKeyBase64)
+	require.True(t, cfg.GitHubAppConfigured())
+}
+
+func TestLoad_WithoutGitHubAppNotRequired(t *testing.T) {
+	setRequiredEnv(t)
+	// Leave all PI_GITHUB_APP_* unset.
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.GitHubAppConfigured())
+}

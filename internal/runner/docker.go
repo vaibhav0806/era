@@ -21,10 +21,10 @@ import (
 var ErrNoResult = errors.New("runner produced no RESULT line")
 
 // Docker runs tasks as Docker containers by shelling out to the `docker` CLI.
+// It holds no long-lived credentials; per-task tokens arrive via RunInput.
 type Docker struct {
 	Image            string
 	SandboxRepo      string // "owner/repo"
-	GitHubPAT        string
 	OpenRouterAPIKey string // forwarded to container as PI_SIDECAR_OPENROUTER_API_KEY
 	PiModel          string
 	MaxTokens        int
@@ -37,6 +37,7 @@ type Docker struct {
 type RunInput struct {
 	TaskID      int64
 	Description string
+	GitHubToken string // per-task installation token (or classic PAT as fallback)
 }
 
 // RunOutput is the parsed result of a successful container run.
@@ -59,7 +60,7 @@ func (d *Docker) Run(ctx context.Context, in RunInput) (*RunOutput, error) {
 		"-e", fmt.Sprintf("ERA_TASK_ID=%d", in.TaskID),
 		"-e", fmt.Sprintf("ERA_TASK_DESCRIPTION=%s", in.Description),
 		"-e", fmt.Sprintf("ERA_GITHUB_REPO=%s", d.SandboxRepo),
-		"-e", fmt.Sprintf("PI_SIDECAR_GITHUB_PAT=%s", d.GitHubPAT),
+		"-e", fmt.Sprintf("PI_SIDECAR_GITHUB_PAT=%s", in.GitHubToken),
 		"-e", fmt.Sprintf("PI_SIDECAR_OPENROUTER_API_KEY=%s", d.OpenRouterAPIKey),
 		"-e", fmt.Sprintf("ERA_PI_MODEL=%s", d.PiModel),
 		"-e", fmt.Sprintf("ERA_MAX_TOKENS=%d", d.MaxTokens),

@@ -22,23 +22,39 @@ type fakeRunner struct {
 	calls     int
 	lastID    int64
 	lastDes   string
+	lastToken string
 }
 
-func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string) (string, string, int64, int, []audit.Entry, error) {
+func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string) (string, string, int64, int, []audit.Entry, error) {
 	f.calls++
 	f.lastID = taskID
 	f.lastDes = desc
+	f.lastToken = ghToken
 	return f.branch, f.summary, f.tokens, f.costCents, f.audits, f.err
 }
 
+type fakeTokens struct {
+	token string
+	err   error
+}
+
+func (f *fakeTokens) InstallationToken(ctx context.Context) (string, error) {
+	return f.token, f.err
+}
+
 func newRunQueue(t *testing.T, r queue.Runner) (*queue.Queue, *db.Repo) {
+	t.Helper()
+	return newRunQueueWithTokens(t, r, nil)
+}
+
+func newRunQueueWithTokens(t *testing.T, r queue.Runner, tokens queue.TokenSource) (*queue.Queue, *db.Repo) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "t.db")
 	h, err := db.Open(context.Background(), path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 	repo := db.NewRepo(h)
-	return queue.New(repo, r), repo
+	return queue.New(repo, r, tokens), repo
 }
 
 func TestQueue_RunNext_Success(t *testing.T) {
@@ -236,4 +252,28 @@ func TestQueue_RunNext_PersistsAuditEntries(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, httpReqs)
+}
+
+func TestQueue_RunNext_PassesGhTokenFromSource(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "b", summary: "s"}
+	tokens := &fakeTokens{token: "ghs_test_token_123"}
+	q, _ := newRunQueueWithTokens(t, fr, tokens)
+	_, _ = q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "ghs_test_token_123", fr.lastToken, "runner should receive the minted token")
+}
+
+func TestQueue_RunNext_TokenMintFailure(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{}
+	tokens := &fakeTokens{err: errors.New("github down")}
+	q, repo := newRunQueueWithTokens(t, fr, tokens)
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.Error(t, err)
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "failed", task.Status)
+	require.Contains(t, task.Error.String, "token mint")
 }

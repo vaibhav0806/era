@@ -21,6 +21,17 @@ type Config struct {
 	MaxCostCentsPerTask  int
 	MaxIterationsPerTask int
 	MaxWallClockSeconds  int
+
+	// M2-25 additions — GitHub App (optional in M2-25, required in M2-26).
+	GitHubAppID               int64
+	GitHubAppInstallationID   int64
+	GitHubAppPrivateKeyBase64 string
+}
+
+// GitHubAppConfigured reports whether all three App env vars are present.
+// M2-26 makes this mandatory; M2-25 treats missing App as fallback to PAT.
+func (c *Config) GitHubAppConfigured() bool {
+	return c.GitHubAppID != 0 && c.GitHubAppInstallationID != 0 && c.GitHubAppPrivateKeyBase64 != ""
 }
 
 const (
@@ -79,6 +90,16 @@ func Load() (*Config, error) {
 	if c.MaxWallClockSeconds, err = intEnv("PI_MAX_WALL_CLOCK_SECONDS", defaultMaxWallClockSeconds); err != nil {
 		return nil, err
 	}
+
+	// GitHub App fields — optional in M2-25.
+	if c.GitHubAppID, err = int64Env("PI_GITHUB_APP_ID", 0); err != nil {
+		return nil, err
+	}
+	if c.GitHubAppInstallationID, err = int64Env("PI_GITHUB_APP_INSTALLATION_ID", 0); err != nil {
+		return nil, err
+	}
+	c.GitHubAppPrivateKeyBase64 = os.Getenv("PI_GITHUB_APP_PRIVATE_KEY")
+
 	return c, nil
 }
 
@@ -100,6 +121,18 @@ func intEnv(key string, def int) (int, error) {
 	}
 	if v <= 0 {
 		return 0, fmt.Errorf("%s must be positive, got %d", key, v)
+	}
+	return v, nil
+}
+
+func int64Env(key string, def int64) (int64, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def, nil
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be integer: %w", key, err)
 	}
 	return v, nil
 }
