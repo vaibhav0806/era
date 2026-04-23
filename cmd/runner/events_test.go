@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -52,4 +53,16 @@ func TestStreamEvents(t *testing.T) {
 	require.Len(t, evts, 2)
 	require.Equal(t, "agent_end", evts[0].Type)
 	require.Equal(t, "error", evts[1].Type)
+}
+
+func TestParseEvent_MessageEndWithTextContent(t *testing.T) {
+	data, err := os.ReadFile("testdata/message_end_with_text.jsonl")
+	require.NoError(t, err)
+	e, err := parseEvent(data)
+	require.NoError(t, err)
+	require.Equal(t, "message_end", e.Type)
+	require.Equal(t, "assistant", e.Message.Role)
+	require.Len(t, e.Message.Content, 1)
+	require.Equal(t, "text", e.Message.Content[0].Type)
+	require.Equal(t, "Here is what I found in the README.", e.Message.Content[0].Text)
 }

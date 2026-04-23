@@ -11,6 +11,11 @@ type piEvent struct {
 	Type    string `json:"type"`
 	Error   string `json:"error,omitempty"`
 	Message struct {
+		Role    string `json:"role,omitempty"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text,omitempty"`
+		} `json:"content,omitempty"`
 		StopReason string `json:"stopReason,omitempty"`
 		Usage      struct {
 			TotalTokens int64 `json:"totalTokens"`

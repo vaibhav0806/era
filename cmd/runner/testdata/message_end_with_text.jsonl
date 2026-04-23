@@ -1,0 +1,1 @@
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Here is what I found in the README."}],"stopReason":"end_turn","usage":{"totalTokens":150,"cost":{"total":0.0012}}}}
