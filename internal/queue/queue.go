@@ -29,9 +29,10 @@ type DiffSource interface {
 }
 
 // Runner executes a task. ghToken is a per-task GitHub installation token
-// (or empty string if no TokenSource is configured).
+// (or empty string if no TokenSource is configured). repo is the resolved
+// target repo (owner/repo) for this task.
 type Runner interface {
-	Run(ctx context.Context, taskID int64, description string, ghToken string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
+	Run(ctx context.Context, taskID int64, description string, ghToken string, repo string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
 // NeedsReviewArgs bundles the approval-DM payload. Lives in queue so tests
@@ -87,11 +88,8 @@ func New(repo *db.Repo, runner Runner, tokens TokenSource, compare DiffSource, r
 // startup; do not change mid-flight — RunNext reads the field without a lock.
 func (q *Queue) SetNotifier(n Notifier) { q.notifier = n }
 
-// Keep back-compat: existing callers still pass just description; M3.5-2
-// extends with optional repo arg. For M3.5-1, CreateTask just passes "" to
-// the repo.
-func (q *Queue) CreateTask(ctx context.Context, desc string) (int64, error) {
-	t, err := q.repo.CreateTask(ctx, desc, "")
+func (q *Queue) CreateTask(ctx context.Context, desc, targetRepo string) (int64, error) {
+	t, err := q.repo.CreateTask(ctx, desc, targetRepo)
 	if err != nil {
 		return 0, err
 	}
@@ -143,6 +141,11 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 
 	_ = q.repo.AppendEvent(ctx, t.ID, "started", "{}")
 
+	effectiveRepo := t.TargetRepo
+	if effectiveRepo == "" {
+		effectiveRepo = q.repoFQN
+	}
+
 	var ghToken string
 	if q.tokens != nil {
 		tok, err := q.tokens.InstallationToken(ctx)
@@ -157,7 +160,7 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 		ghToken = tok
 	}
 
-	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken)
+	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken, effectiveRepo)
 	if runErr != nil {
 		_ = q.repo.AppendEvent(ctx, t.ID, "failed", quoteJSON(runErr.Error()))
 		if ferr := q.repo.FailTask(ctx, t.ID, runErr.Error()); ferr != nil {
@@ -180,7 +183,7 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 	var flaggedFindings []diffscan.Finding
 	var flaggedDiffs []diffscan.FileDiff
 	if q.compare != nil && branch != "" {
-		diffs, err := q.compare.Compare(ctx, q.repoFQN, "main", branch)
+		diffs, err := q.compare.Compare(ctx, effectiveRepo, "main", branch)
 		if err != nil {
 			_ = q.repo.AppendEvent(ctx, t.ID, "diffscan_error", quoteJSON(err.Error()))
 		} else {
@@ -198,7 +201,7 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 	}
 	if q.notifier != nil {
 		if len(flaggedFindings) > 0 {
-			compareURL := fmt.Sprintf("https://github.com/%s/compare/main...%s", q.repoFQN, branch)
+			compareURL := fmt.Sprintf("https://github.com/%s/compare/main...%s", effectiveRepo, branch)
 			q.notifier.NotifyNeedsReview(ctx, NeedsReviewArgs{
 				TaskID:     t.ID,
 				Branch:     branch,
@@ -262,7 +265,11 @@ func (q *Queue) RejectTask(ctx context.Context, id int64) error {
 		}
 		_ = q.repo.AppendEvent(ctx, id, "rejected", "{}")
 		if q.branchDeleter != nil && task.BranchName.Valid && task.BranchName.String != "" {
-			if err := q.branchDeleter.DeleteBranch(ctx, q.repoFQN, task.BranchName.String); err != nil {
+			effectiveRepo := task.TargetRepo
+			if effectiveRepo == "" {
+				effectiveRepo = q.repoFQN
+			}
+			if err := q.branchDeleter.DeleteBranch(ctx, effectiveRepo, task.BranchName.String); err != nil {
 				// Don't roll back the status change — user intent has been
 				// recorded. Surface the error so the caller (callback handler)
 				// can show it in the toast.

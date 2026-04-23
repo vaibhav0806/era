@@ -38,6 +38,7 @@ type RunInput struct {
 	TaskID      int64
 	Description string
 	GitHubToken string // per-task installation token (or classic PAT as fallback)
+	Repo        string // per-invocation override; empty falls back to d.SandboxRepo
 }
 
 // RunOutput is the parsed result of a successful container run.
@@ -53,13 +54,17 @@ type RunOutput struct {
 // Run spawns the container, feeds it the task inputs as env vars, waits for
 // it to exit, and parses the RESULT line out of its combined stdout+stderr.
 func (d *Docker) Run(ctx context.Context, in RunInput) (*RunOutput, error) {
+	repo := in.Repo
+	if repo == "" {
+		repo = d.SandboxRepo // backward-compat default
+	}
 	args := []string{
 		"run", "--rm",
 		"--cap-add=NET_ADMIN", // for iptables inside container
 		"--cap-add=NET_RAW",   // for REJECT --reject-with tcp-reset
 		"-e", fmt.Sprintf("ERA_TASK_ID=%d", in.TaskID),
 		"-e", fmt.Sprintf("ERA_TASK_DESCRIPTION=%s", in.Description),
-		"-e", fmt.Sprintf("ERA_GITHUB_REPO=%s", d.SandboxRepo),
+		"-e", fmt.Sprintf("ERA_GITHUB_REPO=%s", repo),
 		"-e", fmt.Sprintf("PI_SIDECAR_GITHUB_PAT=%s", in.GitHubToken),
 		"-e", fmt.Sprintf("PI_SIDECAR_OPENROUTER_API_KEY=%s", d.OpenRouterAPIKey),
 		"-e", fmt.Sprintf("ERA_PI_MODEL=%s", d.PiModel),

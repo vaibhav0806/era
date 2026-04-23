@@ -11,9 +11,10 @@ import (
 
 // stubOps records calls instead of touching a real DB.
 type stubOps struct {
-	Created []string
-	Status  map[int64]string
-	Listed  bool
+	Created         []string
+	LastCreatedRepo string
+	Status          map[int64]string
+	Listed          bool
 
 	// M3 additions:
 	LastApprovalData string
@@ -26,8 +27,9 @@ type stubOps struct {
 	RetryErr         error
 }
 
-func (s *stubOps) CreateTask(ctx context.Context, desc string) (int64, error) {
+func (s *stubOps) CreateTask(ctx context.Context, desc, targetRepo string) (int64, error) {
 	s.Created = append(s.Created, desc)
+	s.LastCreatedRepo = targetRepo
 	return int64(len(s.Created)), nil
 }
 func (s *stubOps) TaskStatus(ctx context.Context, id int64) (string, error) {
@@ -194,4 +196,45 @@ func TestHandler_CancelError(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/cancel 42"}))
 	require.Len(t, fc.Sent, 1)
 	require.Contains(t, fc.Sent[0].Text, "cannot be cancelled")
+}
+
+func TestParseTaskArgs(t *testing.T) {
+	tests := []struct {
+		in       string
+		wantRepo string
+		wantDesc string
+	}{
+		{"add a file", "", "add a file"},
+		{"vaibhav0806/era add a file", "vaibhav0806/era", "add a file"},
+		{"vaibhav0806/era", "vaibhav0806/era", ""},
+		{"alice/foo-bar refactor stuff", "alice/foo-bar", "refactor stuff"},
+		{"justwords no slash", "", "justwords no slash"},
+		{"x/y.z multiple words", "x/y.z", "multiple words"},
+		{"", "", ""},
+	}
+	for _, tc := range tests {
+		gotRepo, gotDesc := parseTaskArgs(tc.in)
+		require.Equal(t, tc.wantRepo, gotRepo, "input: %q", tc.in)
+		require.Equal(t, tc.wantDesc, gotDesc, "input: %q", tc.in)
+	}
+}
+
+func TestHandler_TaskCommand_WithRepo(t *testing.T) {
+	ops := &stubOps{}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/task vaibhav0806/foo build auth"}))
+	require.Equal(t, []string{"build auth"}, ops.Created)
+	require.Equal(t, "vaibhav0806/foo", ops.LastCreatedRepo)
+	require.Contains(t, fc.Sent[0].Text, "vaibhav0806/foo")
+}
+
+func TestHandler_TaskCommand_WithoutRepo_UsesDefault(t *testing.T) {
+	ops := &stubOps{}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/task add a file"}))
+	require.Equal(t, []string{"add a file"}, ops.Created)
+	require.Equal(t, "", ops.LastCreatedRepo)
+	require.NotContains(t, fc.Sent[0].Text, "repo:")
 }

@@ -11,8 +11,8 @@ type QueueAdapter struct {
 	D *Docker
 }
 
-func (q QueueAdapter) Run(ctx context.Context, taskID int64, description string, ghToken string) (string, string, int64, int, []audit.Entry, error) {
-	out, err := q.D.Run(ctx, RunInput{TaskID: taskID, Description: description, GitHubToken: ghToken})
+func (q QueueAdapter) Run(ctx context.Context, taskID int64, description string, ghToken string, repo string) (string, string, int64, int, []audit.Entry, error) {
+	out, err := q.D.Run(ctx, RunInput{TaskID: taskID, Description: description, GitHubToken: ghToken, Repo: repo})
 	if err != nil {
 		return "", "", 0, 0, nil, err
 	}

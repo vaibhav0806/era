@@ -4,9 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+// repoFmtRE matches owner/repo, allowing word chars, dots, dashes.
+// Examples it matches: vaibhav0806/era, alice/foo-bar, x/y.z
+// Examples it doesn't: just-text, /no-leading-slash, foo
+var repoFmtRE = regexp.MustCompile(`^[\w.-]+/[\w.-]+$`)
+
+// parseTaskArgs splits the argument to /task into (repo, description).
+// If the first token looks like owner/repo, it's the repo and remaining
+// text is the description. Otherwise repo is empty (caller uses default).
+func parseTaskArgs(s string) (repo, desc string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(s, " ", 2)
+	if len(parts) >= 1 && repoFmtRE.MatchString(parts[0]) {
+		if len(parts) == 2 {
+			return parts[0], strings.TrimSpace(parts[1])
+		}
+		return parts[0], "" // repo only, no description
+	}
+	return "", s
+}
 
 // ErrTaskNotFound is returned by Ops.TaskStatus when the task ID is unknown.
 var ErrTaskNotFound = errors.New("task not found")
@@ -22,7 +46,7 @@ type TaskSummary struct {
 // narrow so we can stub it in tests. Implemented by internal/queue.Queue in
 // Task 10.
 type Ops interface {
-	CreateTask(ctx context.Context, desc string) (int64, error)
+	CreateTask(ctx context.Context, desc, targetRepo string) (int64, error)
 	TaskStatus(ctx context.Context, id int64) (string, error)
 	ListRecent(ctx context.Context, limit int) ([]TaskSummary, error)
 	HandleApproval(ctx context.Context, data string) (replyText string, err error)
@@ -48,13 +72,17 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 	text := strings.TrimSpace(u.Text)
 	switch {
 	case strings.HasPrefix(text, "/task "):
-		desc := strings.TrimSpace(strings.TrimPrefix(text, "/task "))
+		arg := strings.TrimSpace(strings.TrimPrefix(text, "/task "))
+		repo, desc := parseTaskArgs(arg)
 		if desc == "" {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /task <description>")
+			return h.client.SendMessage(ctx, u.ChatID, "usage: /task [owner/repo] <description>")
 		}
-		id, err := h.ops.CreateTask(ctx, desc)
+		id, err := h.ops.CreateTask(ctx, desc, repo)
 		if err != nil {
 			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+		}
+		if repo != "" {
+			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued (repo: %s)", id, repo))
 		}
 		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued", id))
 
