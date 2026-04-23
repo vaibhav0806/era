@@ -45,7 +45,7 @@ install -d -o era -g era -m 700 /etc/era
 
 log "sudoers entry for era (limited to restart/status era)"
 cat > /etc/sudoers.d/era <<'EOF'
-era ALL=(root) NOPASSWD: /bin/systemctl restart era, /bin/systemctl status era, /bin/systemctl start era, /bin/systemctl stop era, /bin/journalctl -u era
+era ALL=(root) NOPASSWD: /usr/bin/systemctl restart era, /usr/bin/systemctl status era, /usr/bin/systemctl start era, /usr/bin/systemctl stop era, /usr/bin/journalctl -u era
 EOF
 chmod 440 /etc/sudoers.d/era
 
