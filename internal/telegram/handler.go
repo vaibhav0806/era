@@ -87,8 +87,31 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 		}
 		return h.client.SendMessage(ctx, u.ChatID, b.String())
 
+	case strings.HasPrefix(text, "/cancel "):
+		raw := strings.TrimSpace(strings.TrimPrefix(text, "/cancel "))
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return h.client.SendMessage(ctx, u.ChatID, "usage: /cancel <task-id>")
+		}
+		if err := h.ops.CancelTask(ctx, id); err != nil {
+			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("cancel #%d failed: %v", id, err))
+		}
+		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d cancel requested", id))
+
+	case strings.HasPrefix(text, "/retry "):
+		raw := strings.TrimSpace(strings.TrimPrefix(text, "/retry "))
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return h.client.SendMessage(ctx, u.ChatID, "usage: /retry <task-id>")
+		}
+		newID, err := h.ops.RetryTask(ctx, id)
+		if err != nil {
+			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry failed: %v", err))
+		}
+		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry queued as #%d (from #%d)", newID, id))
+
 	default:
-		return h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list")
+		return h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list, /cancel, /retry")
 	}
 }
 

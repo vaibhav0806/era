@@ -20,6 +20,7 @@ type stubOps struct {
 	ApprovalReply    string
 	ApprovalErr      error
 	CancelledIDs     []int64
+	CancelErr        error
 	RetriedIDs       []int64
 	RetryNewID       int64
 	RetryErr         error
@@ -49,7 +50,7 @@ func (s *stubOps) HandleApproval(ctx context.Context, data string) (string, erro
 // interface includes them; compile-time assertion needs them now.
 func (s *stubOps) CancelTask(ctx context.Context, id int64) error {
 	s.CancelledIDs = append(s.CancelledIDs, id)
-	return nil
+	return s.CancelErr
 }
 func (s *stubOps) RetryTask(ctx context.Context, id int64) (int64, error) {
 	s.RetriedIDs = append(s.RetriedIDs, id)
@@ -142,4 +143,55 @@ func TestHandler_CallbackQuery_OpsError(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fc.AnsweredCallbacks, 1)
 	require.Contains(t, fc.AnsweredCallbacks[0].Text, "not found")
+}
+
+func TestHandler_CancelCommand(t *testing.T) {
+	ops := &stubOps{}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/cancel 42"}))
+	require.Equal(t, []int64{42}, ops.CancelledIDs)
+	require.Len(t, fc.Sent, 1)
+	require.Contains(t, fc.Sent[0].Text, "cancel")
+}
+
+func TestHandler_CancelBadArg(t *testing.T) {
+	ops := &stubOps{}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/cancel abc"}))
+	require.Empty(t, ops.CancelledIDs)
+	require.Len(t, fc.Sent, 1)
+	require.Contains(t, fc.Sent[0].Text, "usage:")
+}
+
+func TestHandler_RetryCommand(t *testing.T) {
+	ops := &stubOps{RetryNewID: 150}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/retry 42"}))
+	require.Equal(t, []int64{42}, ops.RetriedIDs)
+	require.Len(t, fc.Sent, 1)
+	require.Contains(t, fc.Sent[0].Text, "#150")
+}
+
+func TestHandler_RetryError(t *testing.T) {
+	ops := &stubOps{RetryErr: errors.New("task not found")}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/retry 42"}))
+	require.Len(t, fc.Sent, 1)
+	require.Contains(t, fc.Sent[0].Text, "not found")
+}
+
+func TestHandler_CancelError(t *testing.T) {
+	ops := &stubOps{CancelErr: errors.New("running tasks cannot be cancelled")}
+	fc := NewFakeClient()
+	h := NewHandler(fc, ops)
+	require.NoError(t, h.Handle(context.Background(), Update{ChatID: 1, Text: "/cancel 42"}))
+	require.Len(t, fc.Sent, 1)
+	require.Contains(t, fc.Sent[0].Text, "cannot be cancelled")
 }
