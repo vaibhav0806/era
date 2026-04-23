@@ -299,14 +299,45 @@ func (q *Queue) HandleApproval(ctx context.Context, data string) (string, error)
 	}
 }
 
-// CancelTask — real implementation in M3-19.
+// CancelTask transitions queued → cancelled. No-op on already-cancelled.
+// Running tasks cannot be cancelled in M3 (requires docker kill; deferred).
+// Other states error.
 func (q *Queue) CancelTask(ctx context.Context, id int64) error {
-	return fmt.Errorf("CancelTask: not implemented until M3-19")
+	task, err := q.repo.GetTask(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get task: %w", err)
+	}
+	switch task.Status {
+	case "cancelled":
+		return nil
+	case "queued":
+		if err := q.repo.SetStatus(ctx, id, "cancelled"); err != nil {
+			return fmt.Errorf("set status: %w", err)
+		}
+		_ = q.repo.AppendEvent(ctx, id, "cancelled", "{}")
+		return nil
+	case "running":
+		return fmt.Errorf("running tasks cannot be cancelled (running task #%d will hit its wall-clock cap)", id)
+	default:
+		return fmt.Errorf("cannot cancel task in state %q", task.Status)
+	}
 }
 
-// RetryTask — real implementation in M3-20.
+// RetryTask creates a new queued task with the same description as the
+// referenced prior task. The prior task's state is unchanged. Returns the
+// new task ID.
 func (q *Queue) RetryTask(ctx context.Context, id int64) (int64, error) {
-	return 0, fmt.Errorf("RetryTask: not implemented until M3-20")
+	orig, err := q.repo.GetTask(ctx, id)
+	if err != nil {
+		return 0, fmt.Errorf("get original task: %w", err)
+	}
+	newTask, err := q.repo.CreateTask(ctx, orig.Description)
+	if err != nil {
+		return 0, fmt.Errorf("create retry task: %w", err)
+	}
+	_ = q.repo.AppendEvent(ctx, newTask.ID, "retried_from",
+		fmt.Sprintf(`{"original_task_id":%d}`, id))
+	return newTask.ID, nil
 }
 
 // compile-time assertion that Queue satisfies telegram.Ops

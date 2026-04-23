@@ -513,3 +513,84 @@ func TestQueue_ApproveTask_WrongStatus_Errors(t *testing.T) {
 	err := q.ApproveTask(ctx, id)
 	require.Error(t, err)
 }
+
+func TestQueue_CancelTask_QueuedToCancelled(t *testing.T) {
+	ctx := context.Background()
+	q, repo := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+
+	require.NoError(t, q.CancelTask(ctx, id))
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "cancelled", task.Status)
+
+	// Idempotent
+	require.NoError(t, q.CancelTask(ctx, id))
+	task, _ = repo.GetTask(ctx, id)
+	require.Equal(t, "cancelled", task.Status)
+}
+
+func TestQueue_CancelTask_RunningErrors(t *testing.T) {
+	ctx := context.Background()
+	q, repo := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+	require.NoError(t, repo.SetStatus(ctx, id, "running"))
+
+	err := q.CancelTask(ctx, id)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "running")
+	// Status unchanged
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "running", task.Status)
+}
+
+func TestQueue_CancelTask_CompletedErrors(t *testing.T) {
+	ctx := context.Background()
+	q, repo := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+	require.NoError(t, repo.CompleteTask(ctx, id, "agent/1/x", "s", 0, 0))
+
+	err := q.CancelTask(ctx, id)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot cancel")
+}
+
+func TestQueue_RetryTask_ClonesDescription(t *testing.T) {
+	ctx := context.Background()
+	q, repo := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	oldID, _ := q.CreateTask(ctx, "refactor the auth middleware")
+	require.NoError(t, repo.SetStatus(ctx, oldID, "failed"))
+
+	newID, err := q.RetryTask(ctx, oldID)
+	require.NoError(t, err)
+	require.NotEqual(t, oldID, newID)
+
+	newTask, _ := repo.GetTask(ctx, newID)
+	require.Equal(t, "refactor the auth middleware", newTask.Description)
+	require.Equal(t, "queued", newTask.Status)
+
+	// Old task unchanged
+	oldTask, _ := repo.GetTask(ctx, oldID)
+	require.Equal(t, "failed", oldTask.Status)
+}
+
+func TestQueue_RetryTask_NotFoundErrors(t *testing.T) {
+	ctx := context.Background()
+	q, _ := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	_, err := q.RetryTask(ctx, 999)
+	require.Error(t, err)
+}
+
+func TestQueue_RetryTask_WorksForAnyStatus(t *testing.T) {
+	ctx := context.Background()
+	q, repo := newRunQueueWithDeps(t, &fakeRunner{}, nil, nil, "a/b")
+	// Even approved/rejected/completed tasks can be retried — it just clones
+	// the description. This is the "/retry ran a task that succeeded already
+	// because I want the same thing done again" case.
+	id, _ := q.CreateTask(ctx, "same thing twice")
+	require.NoError(t, repo.SetStatus(ctx, id, "approved"))
+	newID, err := q.RetryTask(ctx, id)
+	require.NoError(t, err)
+	newTask, _ := repo.GetTask(ctx, newID)
+	require.Equal(t, "same thing twice", newTask.Description)
+	require.Equal(t, "queued", newTask.Status)
+}
