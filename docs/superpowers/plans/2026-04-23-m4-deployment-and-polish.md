@@ -603,6 +603,7 @@ func TestTruncateForTelegram_UnicodeSafe(t *testing.T) {
 	// Budget 50 with 3-byte runes → 16 complete runes = 48 bytes kept.
 	require.LessOrEqual(t, len(prefix), 50)
 }
+```
 
 - [ ] **Step 2: Run to verify fail.**
 
@@ -1414,11 +1415,11 @@ Update the existing `RunNext` call site at line ~204:
 compareURL := fmt.Sprintf("https://github.com/%s/compare/main...%s", effectiveRepo, branch)
 q.notifier.NotifyNeedsReview(ctx, NeedsReviewArgs{
     ...
-    PRURL: compareURL, // temp — V-6's wiring will feed the real PR URL here.
+    PRURL: compareURL, // temp — V-5's wiring will feed the real PR URL here.
 })
 ```
 
-(For this commit we keep the compare URL flowing into the renamed field. V-6 will replace the value.)
+(For this commit we keep the compare URL flowing into the renamed field. V-5 will replace the value.)
 
 - [ ] **Step 2: Extend `Notifier.NotifyCompleted` signature.**
 
@@ -1430,7 +1431,7 @@ type Notifier interface {
 }
 ```
 
-Update the existing RunNext call site (~line 216) to pass a branch tree URL as placeholder until V-6 plugs in a real PR URL:
+Update the existing RunNext call site (~line 216) to pass a branch tree URL as placeholder until V-5 plugs in a real PR URL:
 
 ```go
 q.notifier.NotifyCompleted(ctx, t.ID, effectiveRepo, branch,
@@ -1734,7 +1735,7 @@ func TestQueue_RunNext_DefaultBranchFails_FallsBackToMain(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Verify pass.** (Implementation already done in V-4 — this test just pins the behaviour.)
+- [ ] **Step 2: Verify pass.** (Implementation already done in V-5 — this test just pins the behaviour.)
 
 ```
 go test -run 'TestQueue_RunNext_PR' ./internal/queue/ -race
@@ -2755,7 +2756,7 @@ git commit -m "feat(orchestrator): reconcile on startup + wire DockerKiller"
 # path, RunNext killed path, Reconcile). Live docker-kill round-trip verified
 # manually.
 set -euo pipefail
-go test -race -count=1 -run 'TestRunningSet_|TestCancelTask_|TestQueue_RunNext_KilledTask_|TestReconcile_|TestBuildDockerRunArgs_' \
+go test -race -count=1 -run 'TestRunningSet_|TestCancelTask_|TestQueue_RunNext_KilledTask_|TestReconcile_|TestBuildDockerArgs_' \
     ./internal/queue/... ./internal/runner/... > /dev/null
 echo "OK: phase W — running-task cancel all unit tests green"
 ```
