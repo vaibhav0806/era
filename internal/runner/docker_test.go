@@ -62,3 +62,34 @@ func TestParseResult_SummaryWithSpacesAndNewlines(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "hello world\nand a newline", out.Summary)
 }
+
+func TestBuildDockerArgs_IncludesNameFlag(t *testing.T) {
+	d := &runner.Docker{Image: "test-img", PiModel: "m"}
+	in := runner.RunInput{
+		TaskID:        42,
+		Repo:          "o/r",
+		Description:   "x",
+		GitHubToken:   "tok",
+		ContainerName: "era-runner-42-xyz",
+	}
+	args := d.BuildDockerArgs(in)
+	var found bool
+	for i, a := range args {
+		if a == "--name" && i+1 < len(args) && args[i+1] == "era-runner-42-xyz" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "--name era-runner-42-xyz missing: %v", args)
+}
+
+func TestBuildDockerArgs_OmitsNameWhenBlank(t *testing.T) {
+	d := &runner.Docker{Image: "test-img", PiModel: "m"}
+	in := runner.RunInput{TaskID: 1, Repo: "o/r", Description: "x"}
+	args := d.BuildDockerArgs(in)
+	for i, a := range args {
+		if a == "--name" && i+1 < len(args) {
+			t.Fatalf("--name should be omitted when ContainerName empty; got %v", args)
+		}
+	}
+}

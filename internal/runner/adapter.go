@@ -2,17 +2,34 @@ package runner
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/vaibhav0806/era/internal/audit"
+	"github.com/vaibhav0806/era/internal/queue"
 )
 
 // QueueAdapter adapts a *Docker to the queue.Runner interface.
 type QueueAdapter struct {
-	D *Docker
+	D       *Docker
+	running *queue.RunningSet // optional; nil → no register/deregister
 }
 
-func (q QueueAdapter) Run(ctx context.Context, taskID int64, description string, ghToken string, repo string) (string, string, int64, int, []audit.Entry, error) {
-	out, err := q.D.Run(ctx, RunInput{TaskID: taskID, Description: description, GitHubToken: ghToken, Repo: repo})
+func (q *QueueAdapter) SetRunning(r *queue.RunningSet) { q.running = r }
+
+func (q *QueueAdapter) Run(ctx context.Context, taskID int64, description, ghToken, repo string) (string, string, int64, int, []audit.Entry, error) {
+	name := fmt.Sprintf("era-runner-%d-%d", taskID, time.Now().UnixNano())
+	if q.running != nil {
+		q.running.Register(taskID, name)
+		defer q.running.Deregister(taskID)
+	}
+	out, err := q.D.Run(ctx, RunInput{
+		TaskID:        taskID,
+		Description:   description,
+		GitHubToken:   ghToken,
+		Repo:          repo,
+		ContainerName: name,
+	})
 	if err != nil {
 		return "", "", 0, 0, nil, err
 	}

@@ -91,9 +91,12 @@ func main() {
 	compareClient := githubcompare.New("", appClient)
 	branchDeleter := githubbranch.New("", appClient)
 	prClient := githubpr.New("", appClient)
-	q := queue.New(repo, runner.QueueAdapter{D: docker}, tokenSource, compareClient, cfg.GitHubSandboxRepo)
+	ra := &runner.QueueAdapter{D: docker}
+	q := queue.New(repo, ra, tokenSource, compareClient, cfg.GitHubSandboxRepo)
+	ra.SetRunning(q.Running())
 	q.SetBranchDeleter(branchDeleter)
 	q.SetPRCreator(prClient)
+	q.SetKiller(queue.NewDockerKiller())
 
 	client, err := telegram.NewClient(cfg.TelegramToken, cfg.TelegramAllowedUserID)
 	if err != nil {
