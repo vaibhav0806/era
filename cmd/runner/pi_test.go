@@ -51,6 +51,32 @@ type nopObserver struct{}
 
 func (nopObserver) onEvent(e *piEvent) error { return nil }
 
+func TestRunPi_TracksLastAssistantText(t *testing.T) {
+	jsonl := strings.Join([]string{
+		`{"type":"tool_execution_end","tool":"read"}`,
+		`{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"first answer"}],"usage":{"totalTokens":10,"cost":{"total":0.001}}}}`,
+		`{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"final answer wins"}],"usage":{"totalTokens":20,"cost":{"total":0.002}}}}`,
+		`{"type":"agent_end"}`,
+	}, "\n")
+	p := &fakePi{stdout: strings.NewReader(jsonl)}
+	obs := nopObserver{}
+	s, err := runPi(context.Background(), p, obs)
+	require.NoError(t, err)
+	require.Equal(t, "final answer wins", s.LastText)
+	require.Equal(t, int64(30), s.TotalTokens)
+}
+
+func TestRunPi_LastTextEmptyWhenNoAssistantMessage(t *testing.T) {
+	jsonl := strings.Join([]string{
+		`{"type":"tool_execution_end","tool":"ls"}`,
+		`{"type":"agent_end"}`,
+	}, "\n")
+	p := &fakePi{stdout: strings.NewReader(jsonl)}
+	s, err := runPi(context.Background(), p, nopObserver{})
+	require.NoError(t, err)
+	require.Equal(t, "", s.LastText)
+}
+
 // TestNewRealPi_Flags checks that newRealPi builds the right exec.Cmd:
 //   - uses --provider openrouter (not a raw API-key provider)
 //   - does NOT embed a real OpenRouter key anywhere in Args or Env

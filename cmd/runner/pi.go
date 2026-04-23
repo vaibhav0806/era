@@ -26,6 +26,7 @@ type runSummary struct {
 	TotalTokens  int64
 	TotalCostUSD float64
 	ToolUseCount int
+	LastText     string
 }
 
 // eventObserver watches the live event stream (used by caps enforcer).
@@ -77,6 +78,17 @@ func runPi(ctx context.Context, p piProcess, obs eventObserver) (*runSummary, er
 		case "message_end":
 			summary.TotalTokens += e.Message.Usage.TotalTokens
 			summary.TotalCostUSD += e.Message.Usage.Cost.Total
+			if e.Message.Role == "assistant" {
+				var b strings.Builder
+				for _, c := range e.Message.Content {
+					if c.Type == "text" {
+						b.WriteString(c.Text)
+					}
+				}
+				if txt := b.String(); txt != "" {
+					summary.LastText = txt
+				}
+			}
 		case "tool_execution_end":
 			summary.ToolUseCount++
 		case "error":
