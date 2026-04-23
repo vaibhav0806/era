@@ -1,0 +1,26 @@
+[Unit]
+Description=era agent orchestrator
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=era
+Group=era
+WorkingDirectory=/opt/era
+EnvironmentFile=/etc/era/env
+ExecStart=/opt/era/bin/orchestrator
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/era /var/backups/era /tmp
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
