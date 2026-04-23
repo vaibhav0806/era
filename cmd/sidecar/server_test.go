@@ -22,7 +22,7 @@ func freePort(t *testing.T) string {
 
 func TestServer_Health(t *testing.T) {
 	addr := freePort(t)
-	srv := newServer(addr)
+	srv := newServer(&sidecarConfig{ListenAddr: addr})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

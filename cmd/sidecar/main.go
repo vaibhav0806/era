@@ -19,7 +19,7 @@ func main() {
 	defer stop()
 
 	slog.Info("sidecar starting", "addr", cfg.ListenAddr)
-	srv := newServer(cfg.ListenAddr)
+	srv := newServer(cfg)
 	if err := runServer(ctx, srv); err != nil {
 		fmt.Fprintf(os.Stderr, "sidecar: %v\n", err)
 		os.Exit(1)

@@ -6,11 +6,15 @@ import (
 )
 
 type sidecarConfig struct {
-	ListenAddr string
+	ListenAddr   string
+	TavilyAPIKey string // optional; /search returns 503 if empty
 }
 
 func loadSidecarConfig() (*sidecarConfig, error) {
-	c := &sidecarConfig{ListenAddr: os.Getenv("PI_SIDECAR_LISTEN_ADDR")}
+	c := &sidecarConfig{
+		ListenAddr:   os.Getenv("PI_SIDECAR_LISTEN_ADDR"),
+		TavilyAPIKey: os.Getenv("PI_SIDECAR_TAVILY_API_KEY"),
+	}
 	if c.ListenAddr == "" {
 		return nil, errors.New("PI_SIDECAR_LISTEN_ADDR is required")
 	}

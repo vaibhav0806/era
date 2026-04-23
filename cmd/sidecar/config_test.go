@@ -18,3 +18,19 @@ func TestSidecarConfig_MissingListenAddr(t *testing.T) {
 	_, err := loadSidecarConfig()
 	require.ErrorContains(t, err, "PI_SIDECAR_LISTEN_ADDR")
 }
+
+func TestSidecarConfig_TavilyOptional(t *testing.T) {
+	t.Setenv("PI_SIDECAR_LISTEN_ADDR", "127.0.0.1:8080")
+	t.Setenv("PI_SIDECAR_TAVILY_API_KEY", "tvly-abc")
+	c, err := loadSidecarConfig()
+	require.NoError(t, err)
+	require.Equal(t, "tvly-abc", c.TavilyAPIKey)
+}
+
+func TestSidecarConfig_TavilyMissingOK(t *testing.T) {
+	t.Setenv("PI_SIDECAR_LISTEN_ADDR", "127.0.0.1:8080")
+	t.Setenv("PI_SIDECAR_TAVILY_API_KEY", "")
+	c, err := loadSidecarConfig()
+	require.NoError(t, err) // not required
+	require.Equal(t, "", c.TavilyAPIKey)
+}

@@ -20,7 +20,7 @@ func startSidecar(t *testing.T) string {
 	t.Helper()
 	t.Setenv("PI_SIDECAR_TEST_HOOKS", "1")
 	addr := freePort(t)
-	srv := newServer(addr)
+	srv := newServer(&sidecarConfig{ListenAddr: addr})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go runServer(ctx, srv)

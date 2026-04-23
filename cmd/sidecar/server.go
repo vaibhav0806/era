@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func newServer(addr string) *http.Server {
+func newServer(cfg *sidecarConfig) *http.Server {
 	allow := newAllowlist()
 
 	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -18,6 +18,7 @@ func newServer(addr string) *http.Server {
 	if os.Getenv("PI_SIDECAR_TEST_HOOKS") == "1" {
 		testPermitHandler = newTestPermitHandler(allow)
 	}
+	searchHandler := newSearchHandler("", cfg.TavilyAPIKey, allow)
 	proxy := newProxyHandler(allow)
 
 	// Route manually instead of using http.ServeMux. Go 1.22+ ServeMux
@@ -34,6 +35,8 @@ func newServer(addr string) *http.Server {
 				return
 			}
 			http.NotFound(w, r)
+		case "/search":
+			searchHandler.ServeHTTP(w, r)
 		default:
 			proxy.ServeHTTP(w, r)
 		}
@@ -41,7 +44,7 @@ func newServer(addr string) *http.Server {
 
 	audited := newAuditMiddleware(os.Stderr)(root)
 	return &http.Server{
-		Addr:              addr,
+		Addr:              cfg.ListenAddr,
 		Handler:           audited,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
