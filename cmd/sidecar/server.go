@@ -9,10 +9,18 @@ import (
 )
 
 func newServer(addr string) *http.Server {
+	allow := newAllowlist()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
+	if os.Getenv("PI_SIDECAR_TEST_HOOKS") == "1" {
+		mux.HandleFunc("/_test/permit", newTestPermitHandler(allow))
+	}
+	// Anything else falls through to the proxy.
+	proxy := newProxyHandler(allow)
+	mux.Handle("/", proxy)
+
 	audited := newAuditMiddleware(os.Stderr)(mux)
 	return &http.Server{
 		Addr:              addr,
