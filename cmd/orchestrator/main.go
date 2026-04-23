@@ -269,6 +269,22 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// truncateForTelegram caps s at `budget` bytes, appending a rune-safe footer
+// if anything was dropped. Backs up past any partial multi-byte rune so the
+// returned prefix is always valid UTF-8.
+func truncateForTelegram(s string, budget int) string {
+	if len(s) <= budget {
+		return s
+	}
+	cut := budget
+	// If s[cut] is a continuation byte (0b10xxxxxx), we're mid-rune.
+	// Back up until cut sits at a rune-start boundary.
+	for cut > 0 && cut < len(s) && (s[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return s[:cut] + fmt.Sprintf("\n…(%d bytes truncated)", len(s)-cut)
+}
+
 // compile-time assertion that tgNotifier satisfies queue.Notifier
 var _ queue.Notifier = (*tgNotifier)(nil)
 
