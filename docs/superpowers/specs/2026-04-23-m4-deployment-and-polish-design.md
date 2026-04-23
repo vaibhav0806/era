@@ -451,8 +451,8 @@ type Notifier interface {
 - `internal/queue/queue_pr_test.go` — fake PRCreator; successful Run → Create called with right args, pr_number stored in DB, NotifyCompleted receives PR HTMLURL.
 - `internal/queue/queue_pr_test.go` — PR creation fails → task completes anyway, event `pr_create_error` logged, DM falls back to branch URL.
 - `internal/queue/queue_pr_test.go` — DefaultBranch fails → falls back to "main", PR still created with base=main.
-- `internal/queue/queue_reject_test.go` — on reject with pr_number set, PRCreator.Close called BEFORE branchDeleter.Delete; order asserted.
-- `internal/queue/queue_reject_test.go` — on reject with pr_number null (fallback case), branchDeleter called but PRCreator.Close NOT called.
+- `internal/queue/queue_reject_test.go` — on reject with pr_number set, PRCreator.Close called BEFORE branchDeleter.DeleteBranch; order asserted.
+- `internal/queue/queue_reject_test.go` — on reject with pr_number null (fallback case), branchDeleter.DeleteBranch called but PRCreator.Close NOT called.
 
 ### 6.10 Phase gate
 
