@@ -17,7 +17,10 @@ import (
 )
 
 func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
-	requireEnv(t, "PI_GITHUB_PAT", "PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY")
+	requireEnv(t,
+		"PI_GITHUB_APP_ID", "PI_GITHUB_APP_INSTALLATION_ID", "PI_GITHUB_APP_PRIVATE_KEY",
+		"PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY",
+	)
 	requireDocker(t)
 	requireImageM1(t)
 
@@ -33,7 +36,6 @@ func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
 	d := &runner.Docker{
 		Image:            "era-runner:m2",
 		SandboxRepo:      os.Getenv("PI_GITHUB_SANDBOX_REPO"),
-		GitHubPAT:        os.Getenv("PI_GITHUB_PAT"),
 		OpenRouterAPIKey: os.Getenv("PI_OPENROUTER_API_KEY"),
 		PiModel:          "moonshotai/kimi-k2.6",
 		MaxTokens:        100, // guaranteed exceeded by first model response
@@ -41,7 +43,8 @@ func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
 		MaxIterations:    3,   // not the binding cap
 		MaxWallSeconds:   120,
 	}
-	q := queue.New(r, runner.QueueAdapter{D: d})
+	tokens := githubAppTokenSource(t)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
 
 	id, err := q.CreateTask(ctx,
 		"create 20 different files in this repo, each named NOTE_<n>.md, "+

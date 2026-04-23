@@ -8,8 +8,10 @@
 // Run: go test -tags e2e ./internal/e2e/...
 // Requires env vars (or a loaded .env in the parent process):
 //
-//	PI_GITHUB_PAT           valid PAT with write access to the sandbox repo
-//	PI_GITHUB_SANDBOX_REPO  owner/repo
+//	PI_GITHUB_APP_ID              GitHub App numeric ID
+//	PI_GITHUB_APP_INSTALLATION_ID GitHub App installation numeric ID
+//	PI_GITHUB_APP_PRIVATE_KEY     base64-encoded PEM private key
+//	PI_GITHUB_SANDBOX_REPO        owner/repo
 //
 // The test builds a Queue, enqueues a task, runs it through the Docker
 // runner, and confirms the task transitions to "completed" with a branch
@@ -35,14 +37,14 @@ import (
 const runnerImage = "era-runner:m2"
 
 func TestE2E_QueueToDockerToBranch(t *testing.T) {
-	pat := os.Getenv("PI_GITHUB_PAT")
-	repo := os.Getenv("PI_GITHUB_SANDBOX_REPO")
-	openRouterKey := os.Getenv("PI_OPENROUTER_API_KEY")
-	if pat == "" || repo == "" || openRouterKey == "" {
-		t.Skip("PI_GITHUB_PAT, PI_GITHUB_SANDBOX_REPO, and PI_OPENROUTER_API_KEY must be set")
-	}
+	requireEnv(t,
+		"PI_GITHUB_APP_ID", "PI_GITHUB_APP_INSTALLATION_ID", "PI_GITHUB_APP_PRIVATE_KEY",
+		"PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY",
+	)
 	requireDocker(t)
 	requireImage(t)
+
+	repo := os.Getenv("PI_GITHUB_SANDBOX_REPO")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -56,7 +58,6 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 	d := &runner.Docker{
 		Image:            runnerImage,
 		SandboxRepo:      repo,
-		GitHubPAT:        pat,
 		OpenRouterAPIKey: os.Getenv("PI_OPENROUTER_API_KEY"),
 		PiModel:          "moonshotai/kimi-k2.6",
 		MaxTokens:        500_000,
@@ -64,7 +65,8 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 		MaxIterations:    10,
 		MaxWallSeconds:   180,
 	}
-	q := queue.New(r, runner.QueueAdapter{D: d})
+	tokens := githubAppTokenSource(t)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
 
 	id, err := q.CreateTask(ctx, "add a file SMOKE_TEST.md with the single line 'smoke ok'")
 	require.NoError(t, err)
@@ -85,7 +87,8 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 		if branch == "" {
 			return
 		}
-		url := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", pat, repo)
+		url := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git",
+			mintGhToken(t), repo)
 		cmd := exec.Command("git", "push", url, "--delete", branch)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -96,7 +99,7 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 	// Sanity: confirm the branch actually appeared on GitHub by hitting the
 	// API. A successful push + completed DB row should always be accompanied
 	// by the ref existing on the remote.
-	confirmBranchOnGitHub(t, pat, repo, task.BranchName.String)
+	confirmBranchOnGitHub(t, mintGhToken(t), repo, task.BranchName.String)
 }
 
 func requireDocker(t *testing.T) {
@@ -115,12 +118,12 @@ func requireImage(t *testing.T) {
 	}
 }
 
-func confirmBranchOnGitHub(t *testing.T, pat, repo, branch string) {
+func confirmBranchOnGitHub(t *testing.T, token, repo, branch string) {
 	t.Helper()
 	url := fmt.Sprintf("https://api.github.com/repos/%s/git/refs/heads/%s", repo, branch)
 	req, err := http.NewRequest("GET", url, nil)
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+pat)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := http.DefaultClient.Do(req)

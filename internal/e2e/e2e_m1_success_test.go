@@ -21,7 +21,10 @@ import (
 const m1RunnerImage = "era-runner:m2"
 
 func TestE2E_M1_TinyCodingTask(t *testing.T) {
-	requireEnv(t, "PI_GITHUB_PAT", "PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY")
+	requireEnv(t,
+		"PI_GITHUB_APP_ID", "PI_GITHUB_APP_INSTALLATION_ID", "PI_GITHUB_APP_PRIVATE_KEY",
+		"PI_GITHUB_SANDBOX_REPO", "PI_OPENROUTER_API_KEY",
+	)
 	requireDocker(t)
 	requireImageM1(t)
 
@@ -37,7 +40,6 @@ func TestE2E_M1_TinyCodingTask(t *testing.T) {
 	d := &runner.Docker{
 		Image:            m1RunnerImage,
 		SandboxRepo:      os.Getenv("PI_GITHUB_SANDBOX_REPO"),
-		GitHubPAT:        os.Getenv("PI_GITHUB_PAT"),
 		OpenRouterAPIKey: os.Getenv("PI_OPENROUTER_API_KEY"),
 		PiModel:          "moonshotai/kimi-k2.6",
 		MaxTokens:        500_000,
@@ -45,7 +47,8 @@ func TestE2E_M1_TinyCodingTask(t *testing.T) {
 		MaxIterations:    10,
 		MaxWallSeconds:   180,
 	}
-	q := queue.New(r, runner.QueueAdapter{D: d})
+	tokens := githubAppTokenSource(t)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
 
 	id, err := q.CreateTask(ctx, "add a file HELLO_ERA.md with the single line 'hello from era M1'")
 	require.NoError(t, err)
@@ -68,7 +71,7 @@ func TestE2E_M1_TinyCodingTask(t *testing.T) {
 			return
 		}
 		url := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git",
-			os.Getenv("PI_GITHUB_PAT"), os.Getenv("PI_GITHUB_SANDBOX_REPO"))
+			mintGhToken(t), os.Getenv("PI_GITHUB_SANDBOX_REPO"))
 		if out, err := exec.Command("git", "push", url, "--delete", branch).CombinedOutput(); err != nil {
 			t.Logf("cleanup failed: %v\n%s", err, out)
 		}
