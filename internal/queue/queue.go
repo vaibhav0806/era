@@ -32,12 +32,26 @@ type Runner interface {
 	Run(ctx context.Context, taskID int64, description string, ghToken string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
-// Notifier is called by RunNext when a task finishes. Both methods are
+// NeedsReviewArgs bundles the approval-DM payload. Lives in queue so tests
+// can assert shape without importing telegram or diffscan types up there.
+type NeedsReviewArgs struct {
+	TaskID     int64
+	Branch     string
+	Summary    string
+	Tokens     int64
+	CostCents  int
+	Findings   []diffscan.Finding
+	Diffs      []diffscan.FileDiff
+	CompareURL string // e.g. https://github.com/<repo>/compare/main...<branch>
+}
+
+// Notifier is called by RunNext when a task finishes. All methods are
 // fire-and-forget — the notifier is expected to log its own errors and
 // return promptly.
 type Notifier interface {
 	NotifyCompleted(ctx context.Context, taskID int64, branch, summary string, tokens int64, costCents int)
 	NotifyFailed(ctx context.Context, taskID int64, reason string)
+	NotifyNeedsReview(ctx context.Context, args NeedsReviewArgs)
 }
 
 type Queue struct {
@@ -150,6 +164,8 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 		payload, _ := json.Marshal(ae)
 		_ = q.repo.AppendEvent(ctx, t.ID, "http_request", string(payload))
 	}
+	var flaggedFindings []diffscan.Finding
+	var flaggedDiffs []diffscan.FileDiff
 	if q.compare != nil && branch != "" {
 		diffs, err := q.compare.Compare(ctx, q.repoFQN, "main", branch)
 		if err != nil {
@@ -162,11 +178,27 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 				if err := q.repo.SetStatus(ctx, t.ID, "needs_review"); err != nil {
 					_ = q.repo.AppendEvent(ctx, t.ID, "diffscan_setstatus_error", quoteJSON(err.Error()))
 				}
+				flaggedFindings = findings
+				flaggedDiffs = diffs
 			}
 		}
 	}
 	if q.notifier != nil {
-		q.notifier.NotifyCompleted(ctx, t.ID, branch, summary, tokens, costCents)
+		if len(flaggedFindings) > 0 {
+			compareURL := fmt.Sprintf("https://github.com/%s/compare/main...%s", q.repoFQN, branch)
+			q.notifier.NotifyNeedsReview(ctx, NeedsReviewArgs{
+				TaskID:     t.ID,
+				Branch:     branch,
+				Summary:    summary,
+				Tokens:     tokens,
+				CostCents:  costCents,
+				Findings:   flaggedFindings,
+				Diffs:      flaggedDiffs,
+				CompareURL: compareURL,
+			})
+		} else {
+			q.notifier.NotifyCompleted(ctx, t.ID, branch, summary, tokens, costCents)
+		}
 	}
 	return true, nil
 }

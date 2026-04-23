@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/vaibhav0806/era/internal/config"
 	"github.com/vaibhav0806/era/internal/db"
+	"github.com/vaibhav0806/era/internal/diffscan"
 	"github.com/vaibhav0806/era/internal/githubapp"
 	"github.com/vaibhav0806/era/internal/githubcompare"
 	"github.com/vaibhav0806/era/internal/queue"
@@ -177,6 +179,84 @@ func (n *tgNotifier) NotifyFailed(ctx context.Context, id int64, reason string) 
 	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
 		slog.Error("notify failed", "err", err, "task", id)
 	}
+}
+
+func (n *tgNotifier) NotifyNeedsReview(ctx context.Context, a queue.NeedsReviewArgs) {
+	body := formatNeedsReviewMessage(a)
+
+	buttons := [][]telegram.InlineButton{
+		{
+			{Text: "✓ Approve", CallbackData: fmt.Sprintf("approve:%d", a.TaskID)},
+			{Text: "✗ Reject", CallbackData: fmt.Sprintf("reject:%d", a.TaskID)},
+		},
+	}
+
+	_, err := n.client.SendMessageWithButtons(ctx, n.chatID, body, buttons)
+	if err != nil {
+		slog.Error("notify needs_review", "err", err, "task", a.TaskID)
+	}
+}
+
+// telegramMaxChars is the budget we allow for the approval DM body.
+// Telegram caps messages at 4096 chars; we leave ~300 chars headroom.
+const telegramMaxChars = 3800
+
+// formatNeedsReviewMessage composes the human-readable approval DM.
+func formatNeedsReviewMessage(a queue.NeedsReviewArgs) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "task #%d — needs review\n", a.TaskID)
+	fmt.Fprintf(&b, "branch: %s\n", a.Branch)
+	fmt.Fprintf(&b, "tokens: %d  cost: $%.4f\n\n", a.Tokens, float64(a.CostCents)/100.0)
+	b.WriteString("findings:\n")
+	for _, f := range a.Findings {
+		fmt.Fprintf(&b, "  • %s (%s): %s\n", f.Rule, f.Path, truncate(f.Message, 100))
+	}
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "compare: %s\n\n", a.CompareURL)
+	b.WriteString("diff preview:\n")
+	diffPreview := buildDiffPreview(a.Diffs, telegramMaxChars-b.Len()-200)
+	b.WriteString(diffPreview)
+	return b.String()
+}
+
+// buildDiffPreview renders up to budget chars of unified-diff-style preview
+// across all files in order.
+func buildDiffPreview(files []diffscan.FileDiff, budget int) string {
+	if budget <= 0 {
+		return "(diff too large to preview; open the compare link)"
+	}
+	var b strings.Builder
+	for _, f := range files {
+		if b.Len() > budget {
+			b.WriteString("\n…(truncated)")
+			return b.String()
+		}
+		deletedSuffix := map[bool]string{true: " (deleted)", false: ""}[f.Deleted]
+		fmt.Fprintf(&b, "--- %s%s\n", f.Path, deletedSuffix)
+		for _, line := range f.Removed {
+			if b.Len() > budget {
+				b.WriteString("\n…(truncated)")
+				return b.String()
+			}
+			fmt.Fprintf(&b, "- %s\n", line)
+		}
+		for _, line := range f.Added {
+			if b.Len() > budget {
+				b.WriteString("\n…(truncated)")
+				return b.String()
+			}
+			fmt.Fprintf(&b, "+ %s\n", line)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // compile-time assertion that tgNotifier satisfies queue.Notifier

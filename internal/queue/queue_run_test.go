@@ -174,9 +174,20 @@ type failedArgs struct {
 	Reason string
 }
 
+type needsReviewArgs struct {
+	ID        int64
+	Branch    string
+	Summary   string
+	Tokens    int64
+	CostCents int
+	Findings  []diffscan.Finding
+	Diffs     []diffscan.FileDiff
+}
+
 type fakeNotifier struct {
-	completed []completedArgs
-	failed    []failedArgs
+	completed   []completedArgs
+	failed      []failedArgs
+	needsReview []needsReviewArgs
 }
 
 func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, b, s string, t int64, c int) {
@@ -185,6 +196,19 @@ func (f *fakeNotifier) NotifyCompleted(ctx context.Context, id int64, b, s strin
 func (f *fakeNotifier) NotifyFailed(ctx context.Context, id int64, r string) {
 	f.failed = append(f.failed, failedArgs{id, r})
 }
+func (f *fakeNotifier) NotifyNeedsReview(ctx context.Context, a queue.NeedsReviewArgs) {
+	f.needsReview = append(f.needsReview, needsReviewArgs{
+		ID:        a.TaskID,
+		Branch:    a.Branch,
+		Summary:   a.Summary,
+		Tokens:    a.Tokens,
+		CostCents: a.CostCents,
+		Findings:  a.Findings,
+		Diffs:     a.Diffs,
+	})
+}
+
+var _ queue.Notifier = (*fakeNotifier)(nil)
 
 func TestQueue_Notifier_OnSuccess(t *testing.T) {
 	ctx := context.Background()
@@ -364,4 +388,28 @@ func TestQueue_RunNext_NoCompareClient_NoDiffscan(t *testing.T) {
 	require.NoError(t, err)
 	task, _ := repo.GetTask(ctx, id)
 	require.Equal(t, "completed", task.Status)
+}
+
+func TestQueue_RunNext_FlaggedDiff_CallsNotifyNeedsReview(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s", tokens: 100, costCents: 1}
+	fc := &fakeCompare{diffs: []diffscan.FileDiff{
+		{Path: "foo_test.go", Removed: []string{"func TestBar(t *testing.T) {}"}},
+	}}
+	q, _ := newRunQueueWithDeps(t, fr, nil, fc, "a/b")
+	n := &fakeNotifier{}
+	q.SetNotifier(n)
+
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+
+	// Completion DM should NOT have fired (task was flagged)
+	require.Empty(t, n.completed, "clean completion DM should not fire for flagged task")
+	// Approval DM SHOULD have fired with findings attached
+	require.Len(t, n.needsReview, 1)
+	require.Equal(t, id, n.needsReview[0].ID)
+	require.Equal(t, "agent/1/x", n.needsReview[0].Branch)
+	require.NotEmpty(t, n.needsReview[0].Findings)
+	require.Equal(t, "removed_test", n.needsReview[0].Findings[0].Rule)
 }
