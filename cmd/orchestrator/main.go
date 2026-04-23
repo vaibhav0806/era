@@ -19,6 +19,7 @@ import (
 	"github.com/vaibhav0806/era/internal/githubapp"
 	"github.com/vaibhav0806/era/internal/githubbranch"
 	"github.com/vaibhav0806/era/internal/githubcompare"
+	"github.com/vaibhav0806/era/internal/githubpr"
 	"github.com/vaibhav0806/era/internal/queue"
 	"github.com/vaibhav0806/era/internal/runner"
 	"github.com/vaibhav0806/era/internal/telegram"
@@ -89,8 +90,10 @@ func main() {
 
 	compareClient := githubcompare.New("", appClient)
 	branchDeleter := githubbranch.New("", appClient)
+	prClient := githubpr.New("", appClient)
 	q := queue.New(repo, runner.QueueAdapter{D: docker}, tokenSource, compareClient, cfg.GitHubSandboxRepo)
 	q.SetBranchDeleter(branchDeleter)
+	q.SetPRCreator(prClient)
 
 	client, err := telegram.NewClient(cfg.TelegramToken, cfg.TelegramAllowedUserID)
 	if err != nil {
