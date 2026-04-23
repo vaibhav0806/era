@@ -371,9 +371,20 @@ ssh root@178.105.44.3 'install -m 440 /tmp/sudoers-era /etc/sudoers.d/era && vis
 
 Expected: `/etc/sudoers.d/era: parsed OK`.
 
-- [ ] **Step 3: Re-disable root SSH.**
+- [ ] **Step 3: Verify wildcarded sudoers works BEFORE re-locking.**
 
-From Mac:
+Must pass before proceeding. If it fails with "a password is required", the sudoers file didn't install correctly — diagnose and redo step 2 while root SSH is still open (easier remediation window).
+
+```
+ssh era@178.105.44.3 'sudo systemctl status era --no-pager'
+ssh era@178.105.44.3 'sudo journalctl -u era -n 5 --no-pager'
+```
+
+Both should succeed without password prompts.
+
+- [ ] **Step 4: Re-disable root SSH.**
+
+Only proceed once step 3 succeeds. From Mac:
 
 ```
 ssh root@178.105.44.3 'bash /opt/era/deploy/disable-root-ssh.sh'
@@ -388,15 +399,6 @@ ssh era@178.105.44.3 'whoami'   # must return "era"
 ```
 
 If root SSH still works, the reload hasn't taken effect — re-run the disable script.
-
-- [ ] **Step 4: Verify wildcarded sudoers works.**
-
-```
-ssh era@178.105.44.3 'sudo systemctl status era --no-pager'
-ssh era@178.105.44.3 'sudo journalctl -u era -n 5 --no-pager'
-```
-
-Both should succeed without password prompts. If either fails with "a password is required", the sudoers file didn't install correctly — redo steps 1-3.
 
 - [ ] **Step 5: No commit from this task.**
 
@@ -1223,7 +1225,7 @@ if task.PrNumber.Valid && q.prCreator != nil {
 // ... existing branch delete + SetStatus unchanged ...
 ```
 
-Add the `loadFindings` helper in the same file (or `reject_body.go` — the test file is `queue_test`, so pick one and be consistent):
+Add the `loadFindings` helper in the same file (`queue.go`) — it's unexported and only called from `RejectTask`, so colocation is cleanest. `reject_body.go` already holds the exported `RejectionCommentBody`; don't split unexported helpers there.
 
 ```go
 // loadFindings fetches the diffscan_flagged event payload for a task and
@@ -1465,7 +1467,7 @@ git commit -m "feat(runner): HasMakefileTest detects top-level Makefile test tar
 
 - [ ] **Step 1: Write failing tests.**
 
-Add to `pretest_test.go`:
+Add to `pretest_test.go`. Ensure the file's imports include `"context"`, `"os"`, `"testing"`, and `"github.com/stretchr/testify/require"` (the AD-1 block already imported these; verify no additions needed):
 
 ```go
 func TestRunMakefileTest_Pass(t *testing.T) {
@@ -1618,9 +1620,7 @@ func MaybeRunPreCommitTest(ctx context.Context, workspace string) (bool, error) 
 }
 ```
 
-`truncate` already exists in `cmd/runner/main.go` (verify name — it may be unexported; if so, reference it by package-internal name).
-
-If `truncate` doesn't exist, add a minimal one:
+`truncate` doesn't exist in `cmd/runner/`. Add it to `pretest.go`:
 
 ```go
 func truncate(s string, n int) string {
@@ -2127,7 +2127,7 @@ Adjust the phase smokes loop:
         run: |
           for f in scripts/smoke/phase_*.sh; do
             case "$f" in
-              *phase_ab_tooling.sh|*phase_h_docker.sh|*phase_i_e2e.sh|*phase_k_netlock.sh|*phase_m_secrets.sh)
+              *phase_ab_tooling.sh|*phase_h_docker.sh|*phase_i_e2e.sh|*phase_j_sidecar.sh|*phase_k_netlock.sh|*phase_l_search.sh|*phase_m_secrets.sh)
                 echo "SKIP (docker): $f"
                 continue
                 ;;
@@ -2167,6 +2167,8 @@ Watch: `gh run watch` or https://github.com/vaibhav0806/era/actions.
 
 Make a trivial change (comment in a Go file, or a README typo fix). Push. Watch CI. Should run green.
 
+**Abort criteria:** if either of the two pushes produces a red `test` job, STOP. Do not proceed to AF-4 or AF-5. Diagnose the failure, fix it in a new commit, push, re-observe. Only when two consecutive pushes show green `test` jobs is the pipeline safe to enable deploy on. The point of the `if: false` gate is to catch flaky or misconfigured CI BEFORE it has a production-write capability.
+
 ## Task AF-4: Create `deploy/ROLLBACK.md` + `deploy/ROTATE_CI_KEY.md`
 
 **Files:**
@@ -2175,7 +2177,7 @@ Make a trivial change (comment in a Go file, or a README typo fix). Push. Watch 
 
 - [ ] **Step 1: Write ROLLBACK.md.**
 
-```markdown
+````markdown
 # Emergency Rollback
 
 If a CI auto-deploy breaks production (era service down, tasks failing unexpectedly):
@@ -2193,11 +2195,11 @@ sudo systemctl status era            # confirm active (running)
 ```
 
 Then fix the bad commit on master (revert or forward-fix) and push normally — CI will redeploy.
-```
+````
 
 - [ ] **Step 2: Write ROTATE_CI_KEY.md.**
 
-```markdown
+````markdown
 # Rotate the CI Deploy Key
 
 If DEPLOY_SSH_KEY leaks or needs periodic rotation:
@@ -2231,7 +2233,7 @@ If DEPLOY_SSH_KEY leaks or needs periodic rotation:
    mv ~/.ssh/era_ci_new ~/.ssh/era_ci
    mv ~/.ssh/era_ci_new.pub ~/.ssh/era_ci.pub
    ```
-```
+````
 
 - [ ] **Step 3: Commit.**
 
