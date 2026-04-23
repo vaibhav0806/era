@@ -28,7 +28,7 @@ func (q *Queries) AppendEvent(ctx context.Context, arg AppendEventParams) error 
 const claimNextQueuedTask = `-- name: ClaimNextQueuedTask :one
 UPDATE tasks SET status = 'running', started_at = CURRENT_TIMESTAMP
 WHERE id = (SELECT id FROM tasks WHERE status = 'queued' ORDER BY id ASC LIMIT 1)
-RETURNING id, description, status, branch_name, summary, error, created_at, started_at, finished_at, tokens_used, cost_cents
+RETURNING id, description, status, branch_name, summary, error, tokens_used, cost_cents, created_at, started_at, finished_at
 `
 
 func (q *Queries) ClaimNextQueuedTask(ctx context.Context) (Task, error) {
@@ -41,11 +41,11 @@ func (q *Queries) ClaimNextQueuedTask(ctx context.Context) (Task, error) {
 		&i.BranchName,
 		&i.Summary,
 		&i.Error,
+		&i.TokensUsed,
+		&i.CostCents,
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
-		&i.TokensUsed,
-		&i.CostCents,
 	)
 	return i, err
 }
@@ -54,7 +54,7 @@ const createTask = `-- name: CreateTask :one
 
 INSERT INTO tasks (description, status)
 VALUES (?, 'queued')
-RETURNING id, description, status, branch_name, summary, error, created_at, started_at, finished_at, tokens_used, cost_cents
+RETURNING id, description, status, branch_name, summary, error, tokens_used, cost_cents, created_at, started_at, finished_at
 `
 
 // queries/tasks.sql
@@ -68,17 +68,17 @@ func (q *Queries) CreateTask(ctx context.Context, description string) (Task, err
 		&i.BranchName,
 		&i.Summary,
 		&i.Error,
+		&i.TokensUsed,
+		&i.CostCents,
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
-		&i.TokensUsed,
-		&i.CostCents,
 	)
 	return i, err
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, description, status, branch_name, summary, error, created_at, started_at, finished_at, tokens_used, cost_cents FROM tasks WHERE id = ? LIMIT 1
+SELECT id, description, status, branch_name, summary, error, tokens_used, cost_cents, created_at, started_at, finished_at FROM tasks WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
@@ -91,11 +91,11 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
 		&i.BranchName,
 		&i.Summary,
 		&i.Error,
+		&i.TokensUsed,
+		&i.CostCents,
 		&i.CreatedAt,
 		&i.StartedAt,
 		&i.FinishedAt,
-		&i.TokensUsed,
-		&i.CostCents,
 	)
 	return i, err
 }
@@ -134,7 +134,7 @@ func (q *Queries) ListEventsForTask(ctx context.Context, taskID int64) ([]Event,
 }
 
 const listRecentTasks = `-- name: ListRecentTasks :many
-SELECT id, description, status, branch_name, summary, error, created_at, started_at, finished_at, tokens_used, cost_cents FROM tasks ORDER BY created_at DESC LIMIT ?
+SELECT id, description, status, branch_name, summary, error, tokens_used, cost_cents, created_at, started_at, finished_at FROM tasks ORDER BY created_at DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentTasks(ctx context.Context, limit int64) ([]Task, error) {
@@ -153,11 +153,11 @@ func (q *Queries) ListRecentTasks(ctx context.Context, limit int64) ([]Task, err
 			&i.BranchName,
 			&i.Summary,
 			&i.Error,
+			&i.TokensUsed,
+			&i.CostCents,
 			&i.CreatedAt,
 			&i.StartedAt,
 			&i.FinishedAt,
-			&i.TokensUsed,
-			&i.CostCents,
 		); err != nil {
 			return nil, err
 		}
@@ -214,5 +214,19 @@ type MarkTaskFailedParams struct {
 
 func (q *Queries) MarkTaskFailed(ctx context.Context, arg MarkTaskFailedParams) error {
 	_, err := q.db.ExecContext(ctx, markTaskFailed, arg.Error, arg.ID)
+	return err
+}
+
+const setTaskStatus = `-- name: SetTaskStatus :exec
+UPDATE tasks SET status = ? WHERE id = ?
+`
+
+type SetTaskStatusParams struct {
+	Status string `json:"status"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setTaskStatus, arg.Status, arg.ID)
 	return err
 }

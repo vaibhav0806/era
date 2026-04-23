@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/vaibhav0806/era/internal/audit"
 	"github.com/vaibhav0806/era/internal/db"
+	"github.com/vaibhav0806/era/internal/diffscan"
 	"github.com/vaibhav0806/era/internal/queue"
 )
 
@@ -49,12 +50,28 @@ func newRunQueue(t *testing.T, r queue.Runner) (*queue.Queue, *db.Repo) {
 
 func newRunQueueWithTokens(t *testing.T, r queue.Runner, tokens queue.TokenSource) (*queue.Queue, *db.Repo) {
 	t.Helper()
+	return newRunQueueWithDeps(t, r, tokens, nil, "")
+}
+
+func newRunQueueWithDeps(t *testing.T, r queue.Runner, tokens queue.TokenSource, compare queue.DiffSource, repoFQN string) (*queue.Queue, *db.Repo) {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "t.db")
 	h, err := db.Open(context.Background(), path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 	repo := db.NewRepo(h)
-	return queue.New(repo, r, tokens), repo
+	return queue.New(repo, r, tokens, compare, repoFQN), repo
+}
+
+type fakeCompare struct {
+	diffs []diffscan.FileDiff
+	err   error
+	calls int
+}
+
+func (f *fakeCompare) Compare(ctx context.Context, repo, base, head string) ([]diffscan.FileDiff, error) {
+	f.calls++
+	return f.diffs, f.err
 }
 
 func TestQueue_RunNext_Success(t *testing.T) {
@@ -276,4 +293,75 @@ func TestQueue_RunNext_TokenMintFailure(t *testing.T) {
 	task, _ := repo.GetTask(ctx, id)
 	require.Equal(t, "failed", task.Status)
 	require.Contains(t, task.Error.String, "token mint")
+}
+
+func TestQueue_RunNext_CleanDiff_StaysCompleted(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s"}
+	fc := &fakeCompare{diffs: []diffscan.FileDiff{
+		{Path: "foo.go", Added: []string{"foo"}},
+	}}
+	q, repo := newRunQueueWithDeps(t, fr, nil, fc, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "completed", task.Status)
+	require.Equal(t, 1, fc.calls, "compare should have been called exactly once")
+}
+
+func TestQueue_RunNext_FlaggedDiff_SetsNeedsReview(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s"}
+	fc := &fakeCompare{diffs: []diffscan.FileDiff{
+		{Path: "foo_test.go", Removed: []string{"func TestBar(t *testing.T) {}"}},
+	}}
+	q, repo := newRunQueueWithDeps(t, fr, nil, fc, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "needs_review", task.Status)
+
+	events, _ := repo.ListEvents(ctx, id)
+	sawFlag := false
+	for _, e := range events {
+		if e.Kind == "diffscan_flagged" {
+			sawFlag = true
+			require.Contains(t, e.Payload, "removed_test")
+		}
+	}
+	require.True(t, sawFlag)
+}
+
+func TestQueue_RunNext_CompareError_LogsEventButDoesntBlock(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s"}
+	fc := &fakeCompare{err: errors.New("github 404")}
+	q, repo := newRunQueueWithDeps(t, fr, nil, fc, "a/b")
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "completed", task.Status)
+
+	events, _ := repo.ListEvents(ctx, id)
+	sawErr := false
+	for _, e := range events {
+		if e.Kind == "diffscan_error" {
+			sawErr = true
+		}
+	}
+	require.True(t, sawErr)
+}
+
+func TestQueue_RunNext_NoCompareClient_NoDiffscan(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s"}
+	q, repo := newRunQueueWithDeps(t, fr, nil, nil, "") // compare == nil
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+	task, _ := repo.GetTask(ctx, id)
+	require.Equal(t, "completed", task.Status)
 }

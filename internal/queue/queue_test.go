@@ -18,7 +18,7 @@ func newQueue(t *testing.T) (*queue.Queue, *db.Repo) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 	r := db.NewRepo(h)
-	q := queue.New(r, nil, nil) // runner nil for now; wired Task 15
+	q := queue.New(r, nil, nil, nil, "") // runner nil for now; wired Task 15
 	return q, r
 }
 

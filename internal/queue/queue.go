@@ -9,6 +9,7 @@ import (
 
 	"github.com/vaibhav0806/era/internal/audit"
 	"github.com/vaibhav0806/era/internal/db"
+	"github.com/vaibhav0806/era/internal/diffscan"
 	"github.com/vaibhav0806/era/internal/telegram"
 )
 
@@ -17,6 +18,12 @@ import (
 // May be nil in Queue.tokens — RunNext passes "" to runner.Run in that case.
 type TokenSource interface {
 	InstallationToken(ctx context.Context) (string, error)
+}
+
+// DiffSource fetches per-file diffs for a base..head comparison.
+// Implemented by *githubcompare.Client.
+type DiffSource interface {
+	Compare(ctx context.Context, repo, base, head string) ([]diffscan.FileDiff, error)
 }
 
 // Runner executes a task. ghToken is a per-task GitHub installation token
@@ -38,10 +45,18 @@ type Queue struct {
 	runner   Runner
 	notifier Notifier
 	tokens   TokenSource // may be nil
+	compare  DiffSource  // may be nil
+	repoFQN  string      // owner/repo for compare lookups
 }
 
-func New(repo *db.Repo, runner Runner, tokens TokenSource) *Queue {
-	return &Queue{repo: repo, runner: runner, tokens: tokens}
+func New(repo *db.Repo, runner Runner, tokens TokenSource, compare DiffSource, repoFQN string) *Queue {
+	return &Queue{
+		repo:    repo,
+		runner:  runner,
+		tokens:  tokens,
+		compare: compare,
+		repoFQN: repoFQN,
+	}
 }
 
 // SetNotifier attaches a Notifier to this Queue. Safe to call once at
@@ -134,6 +149,21 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 	for _, ae := range audits {
 		payload, _ := json.Marshal(ae)
 		_ = q.repo.AppendEvent(ctx, t.ID, "http_request", string(payload))
+	}
+	if q.compare != nil && branch != "" {
+		diffs, err := q.compare.Compare(ctx, q.repoFQN, "main", branch)
+		if err != nil {
+			_ = q.repo.AppendEvent(ctx, t.ID, "diffscan_error", quoteJSON(err.Error()))
+		} else {
+			findings := diffscan.ScanDiffs(diffs)
+			if len(findings) > 0 {
+				payload, _ := json.Marshal(findings)
+				_ = q.repo.AppendEvent(ctx, t.ID, "diffscan_flagged", string(payload))
+				if err := q.repo.SetStatus(ctx, t.ID, "needs_review"); err != nil {
+					_ = q.repo.AppendEvent(ctx, t.ID, "diffscan_setstatus_error", quoteJSON(err.Error()))
+				}
+			}
+		}
 	}
 	if q.notifier != nil {
 		q.notifier.NotifyCompleted(ctx, t.ID, branch, summary, tokens, costCents)

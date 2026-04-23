@@ -112,3 +112,25 @@ func TestRepo_ListRecent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 3)
 }
+
+func TestRepo_SetStatus(t *testing.T) {
+	ctx := context.Background()
+	r := openTest(t)
+
+	task, err := r.CreateTask(ctx, "x")
+	require.NoError(t, err)
+	require.Equal(t, "queued", task.Status)
+
+	require.NoError(t, r.SetStatus(ctx, task.ID, "needs_review"))
+	got, _ := r.GetTask(ctx, task.ID)
+	require.Equal(t, "needs_review", got.Status)
+}
+
+func TestRepo_SetStatus_RejectsInvalid(t *testing.T) {
+	ctx := context.Background()
+	r := openTest(t)
+	task, _ := r.CreateTask(ctx, "x")
+	// The tasks.status CHECK constraint rejects arbitrary strings.
+	err := r.SetStatus(ctx, task.ID, "nonsense")
+	require.Error(t, err)
+}

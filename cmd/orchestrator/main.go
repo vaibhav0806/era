@@ -14,6 +14,7 @@ import (
 	"github.com/vaibhav0806/era/internal/config"
 	"github.com/vaibhav0806/era/internal/db"
 	"github.com/vaibhav0806/era/internal/githubapp"
+	"github.com/vaibhav0806/era/internal/githubcompare"
 	"github.com/vaibhav0806/era/internal/queue"
 	"github.com/vaibhav0806/era/internal/runner"
 	"github.com/vaibhav0806/era/internal/telegram"
@@ -82,7 +83,8 @@ func main() {
 	slog.Info("github app token source configured",
 		"app_id", cfg.GitHubAppID, "installation_id", cfg.GitHubAppInstallationID)
 
-	q := queue.New(repo, runner.QueueAdapter{D: docker}, tokenSource)
+	compareClient := githubcompare.New("", appClient)
+	q := queue.New(repo, runner.QueueAdapter{D: docker}, tokenSource, compareClient, cfg.GitHubSandboxRepo)
 
 	client, err := telegram.NewClient(cfg.TelegramToken, cfg.TelegramAllowedUserID)
 	if err != nil {

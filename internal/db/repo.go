@@ -64,3 +64,7 @@ func (r *Repo) ListEvents(ctx context.Context, taskID int64) ([]Event, error) {
 func (r *Repo) ListRecent(ctx context.Context, limit int) ([]Task, error) {
 	return r.q.ListRecentTasks(ctx, int64(limit))
 }
+
+func (r *Repo) SetStatus(ctx context.Context, id int64, status string) error {
+	return r.q.SetTaskStatus(ctx, SetTaskStatusParams{Status: status, ID: id})
+}

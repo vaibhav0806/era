@@ -33,9 +33,9 @@ type Task struct {
 	BranchName  sql.NullString `json:"branch_name"`
 	Summary     sql.NullString `json:"summary"`
 	Error       sql.NullString `json:"error"`
+	TokensUsed  int64          `json:"tokens_used"`
+	CostCents   int64          `json:"cost_cents"`
 	CreatedAt   time.Time      `json:"created_at"`
 	StartedAt   sql.NullTime   `json:"started_at"`
 	FinishedAt  sql.NullTime   `json:"finished_at"`
-	TokensUsed  int64          `json:"tokens_used"`
-	CostCents   int64          `json:"cost_cents"`
 }

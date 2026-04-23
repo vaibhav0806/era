@@ -35,3 +35,6 @@ INSERT INTO events (task_id, kind, payload) VALUES (?, ?, ?);
 
 -- name: ListEventsForTask :many
 SELECT * FROM events WHERE task_id = ? ORDER BY created_at ASC;
+
+-- name: SetTaskStatus :exec
+UPDATE tasks SET status = ? WHERE id = ?;

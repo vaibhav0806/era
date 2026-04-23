@@ -18,6 +18,7 @@ type Querier interface {
 	ListRecentTasks(ctx context.Context, limit int64) ([]Task, error)
 	MarkTaskCompleted(ctx context.Context, arg MarkTaskCompletedParams) error
 	MarkTaskFailed(ctx context.Context, arg MarkTaskFailedParams) error
+	SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) error
 }
 
 var _ Querier = (*Queries)(nil)
