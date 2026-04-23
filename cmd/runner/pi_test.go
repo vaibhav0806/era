@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -49,3 +50,52 @@ func TestPi_DrainsEventsAndAggregates(t *testing.T) {
 type nopObserver struct{}
 
 func (nopObserver) onEvent(e *piEvent) error { return nil }
+
+// TestNewRealPi_Flags checks that newRealPi builds the right exec.Cmd:
+//   - uses --provider openrouter (not a raw API-key provider)
+//   - does NOT embed a real OpenRouter key anywhere in Args or Env
+//   - sets OPENROUTER_API_KEY to the dummy sentinel value
+//   - sets PI_CODING_AGENT_DIR to /tmp/pi-state so Pi picks up models.json
+//
+// This is a regression guard: if someone re-adds --provider openrouter with
+// the raw key in env, or switches to a different provider accidentally, this
+// test will catch it.
+func TestNewRealPi_Flags(t *testing.T) {
+	// newRealPi shells out to "pi" via exec.LookPath internally; skip if not
+	// present (CI without Pi installed). We only need the Cmd built, not run.
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("pi binary not in PATH; skipping cmd-args test")
+	}
+
+	ctx := context.Background()
+	p, err := newRealPi(ctx, "moonshotai/kimi-k2.6", "/tmp", "say hi")
+	require.NoError(t, err)
+
+	args := p.cmd.Args
+	argsStr := strings.Join(args, " ")
+
+	// Must use openrouter provider so models.json override routes through sidecar.
+	require.Contains(t, argsStr, "--provider openrouter", "Pi must use --provider openrouter")
+
+	// Must NOT contain a real-looking OpenRouter key (sk-or- prefix).
+	for _, a := range args {
+		require.NotContains(t, a, "sk-or-", "Pi args must not contain a real OpenRouter key")
+	}
+
+	// Env checks.
+	var orKey, piDir string
+	for _, e := range p.cmd.Env {
+		if strings.HasPrefix(e, "OPENROUTER_API_KEY=") {
+			orKey = strings.TrimPrefix(e, "OPENROUTER_API_KEY=")
+		}
+		if strings.HasPrefix(e, "PI_CODING_AGENT_DIR=") {
+			piDir = strings.TrimPrefix(e, "PI_CODING_AGENT_DIR=")
+		}
+		// Must not carry a real key.
+		require.NotContains(t, e, "sk-or-", "Pi env must not contain a real OpenRouter key")
+	}
+	require.Equal(t, "dummy-sidecar-injects-real", orKey,
+		"OPENROUTER_API_KEY must be the dummy sentinel so sidecar injects the real one")
+	require.Equal(t, "/tmp/pi-state", piDir,
+		"PI_CODING_AGENT_DIR must be /tmp/pi-state so Pi picks up models.json")
+}

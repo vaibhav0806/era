@@ -54,7 +54,7 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	c := newCaps(ctx, *cfg)
 
 	prompt := composePrompt(cfg.TaskDescription)
-	p, err := newRealPi(ctx, cfg.PiModel, cfg.OpenRouterAPIKey, workspace, prompt)
+	p, err := newRealPi(ctx, cfg.PiModel, workspace, prompt)
 	if err != nil {
 		return fmt.Errorf("pi spawn: %w", err)
 	}

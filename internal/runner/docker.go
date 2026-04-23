@@ -25,7 +25,7 @@ type Docker struct {
 	Image            string
 	SandboxRepo      string // "owner/repo"
 	GitHubPAT        string
-	OpenRouterAPIKey string
+	OpenRouterAPIKey string // forwarded to container as PI_SIDECAR_OPENROUTER_API_KEY
 	PiModel          string
 	MaxTokens        int
 	MaxCostCents     int
@@ -60,7 +60,7 @@ func (d *Docker) Run(ctx context.Context, in RunInput) (*RunOutput, error) {
 		"-e", fmt.Sprintf("ERA_TASK_DESCRIPTION=%s", in.Description),
 		"-e", fmt.Sprintf("ERA_GITHUB_PAT=%s", d.GitHubPAT),
 		"-e", fmt.Sprintf("ERA_GITHUB_REPO=%s", d.SandboxRepo),
-		"-e", fmt.Sprintf("ERA_OPENROUTER_API_KEY=%s", d.OpenRouterAPIKey),
+		"-e", fmt.Sprintf("PI_SIDECAR_OPENROUTER_API_KEY=%s", d.OpenRouterAPIKey),
 		"-e", fmt.Sprintf("ERA_PI_MODEL=%s", d.PiModel),
 		"-e", fmt.Sprintf("ERA_MAX_TOKENS=%d", d.MaxTokens),
 		"-e", fmt.Sprintf("ERA_MAX_COST_CENTS=%d", d.MaxCostCents),

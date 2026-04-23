@@ -8,6 +8,10 @@ set -eu
 # Sidecar listens on loopback so only in-container processes can reach it.
 export PI_SIDECAR_LISTEN_ADDR="127.0.0.1:8080"
 
+# PI_SIDECAR_OPENROUTER_API_KEY is passed in by the orchestrator at the
+# container level. su -m below preserves it so the sidecar process sees it.
+# (No action needed here — it's already in the environment.)
+
 # Run sidecar as uid 100. Hard-fail if adduser fails (other than "exists").
 # Use -G users because gid 100 (users group) already exists in node:alpine;
 # busybox adduser won't create a new primary group if the gid is taken.
@@ -67,6 +71,22 @@ if [ "${PI_SIDECAR_TEST_DIAG:-}" = "1" ]; then
     code=$(curl --max-time 5 -s -o /dev/null -w "%{http_code}" https://example.com/ 2>/dev/null || echo "denied")
     echo "diag-disallowed-result: $code" >&2
 fi
+
+# Write a models.json that overrides Pi's openrouter provider baseUrl to point
+# at the sidecar. This makes Pi route all LLM calls through the sidecar instead
+# of hitting openrouter.ai directly. The sidecar holds the real OpenRouter key
+# via PI_SIDECAR_OPENROUTER_API_KEY and injects it when proxying.
+mkdir -p /tmp/pi-state
+cat > /tmp/pi-state/models.json <<'MODELS_EOF'
+{
+  "providers": {
+    "openrouter": {
+      "baseUrl": "http://127.0.0.1:8080/llm/v1"
+    }
+  }
+}
+MODELS_EOF
+echo "pi models.json written (openrouter -> sidecar)" >&2
 
 # Hand off to runner. Sidecar continues in background under uid 100.
 exec /usr/local/bin/era-runner "$@"

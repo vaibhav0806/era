@@ -110,7 +110,7 @@ type realPi struct {
 	stderr io.ReadCloser
 }
 
-func newRealPi(ctx context.Context, model, apiKey, workdir, prompt string) (*realPi, error) {
+func newRealPi(ctx context.Context, model, workdir, prompt string) (*realPi, error) {
 	cmd := exec.CommandContext(ctx, "pi",
 		"--mode", "json",
 		"--provider", "openrouter",
@@ -119,8 +119,12 @@ func newRealPi(ctx context.Context, model, apiKey, workdir, prompt string) (*rea
 		prompt,
 	)
 	cmd.Dir = workdir // Pi uses process CWD as session CWD; pass explicitly.
+	// OPENROUTER_API_KEY is a dummy value; the sidecar (started by entrypoint)
+	// holds the real key and injects it when proxying requests to openrouter.ai.
+	// The sidecar's baseUrl is written into /tmp/pi-state/models.json by the
+	// entrypoint so Pi's openrouter provider routes through the sidecar.
 	cmd.Env = append(cmd.Environ(),
-		"OPENROUTER_API_KEY="+apiKey,
+		"OPENROUTER_API_KEY=dummy-sidecar-injects-real",
 		"PI_CODING_AGENT_DIR=/tmp/pi-state",
 	)
 	stdout, err := cmd.StdoutPipe()

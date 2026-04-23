@@ -13,8 +13,7 @@ type runnerConfig struct {
 	GitHubPAT       string
 	GitHubRepo      string // "owner/repo"
 
-	OpenRouterAPIKey string
-	PiModel          string
+	PiModel string
 
 	MaxTokens      int
 	MaxCostCents   int
@@ -24,11 +23,10 @@ type runnerConfig struct {
 
 func loadRunnerConfig() (*runnerConfig, error) {
 	c := &runnerConfig{
-		TaskDescription:  os.Getenv("ERA_TASK_DESCRIPTION"),
-		GitHubPAT:        os.Getenv("ERA_GITHUB_PAT"),
-		GitHubRepo:       os.Getenv("ERA_GITHUB_REPO"),
-		OpenRouterAPIKey: os.Getenv("ERA_OPENROUTER_API_KEY"),
-		PiModel:          os.Getenv("ERA_PI_MODEL"),
+		TaskDescription: os.Getenv("ERA_TASK_DESCRIPTION"),
+		GitHubPAT:       os.Getenv("ERA_GITHUB_PAT"),
+		GitHubRepo:      os.Getenv("ERA_GITHUB_REPO"),
+		PiModel:         os.Getenv("ERA_PI_MODEL"),
 	}
 
 	idRaw := os.Getenv("ERA_TASK_ID")
@@ -48,7 +46,6 @@ func loadRunnerConfig() (*runnerConfig, error) {
 		{"ERA_TASK_DESCRIPTION", c.TaskDescription},
 		{"ERA_GITHUB_PAT", c.GitHubPAT},
 		{"ERA_GITHUB_REPO", c.GitHubRepo},
-		{"ERA_OPENROUTER_API_KEY", c.OpenRouterAPIKey},
 		{"ERA_PI_MODEL", c.PiModel},
 	} {
 		if f.v == "" {
