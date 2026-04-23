@@ -4,32 +4,33 @@ A personal agent orchestrator that runs tasks via Telegram, executes them in dis
 
 The name reflects the intent: this is the chapter where the typing gets delegated and the focus shifts to describing and reviewing. M0 lays down the chassis; later milestones swap in a real coding agent, network allowlisting, and approval gates.
 
-## Status: Milestone 2 — security hardening
+## Status: Milestone 3 — approvals + EOD digest
 
-M2 wraps Pi in a hardened sandbox. A second Go binary (`cmd/sidecar`) runs alongside the runner inside the container as the only process with internet access (enforced via iptables with uid-based rules). Pi's HTTP traffic is forced through the sidecar via `HTTPS_PROXY`. The sidecar exposes exactly what Pi needs:
+M3 closes the human-in-the-loop gap. Every completed task is scanned for reward-hacking patterns (removed tests, `.skip` directives, weakened assertions, deleted test files). Clean tasks auto-complete as before. Flagged tasks transition to `needs_review` and the orchestrator sends a Telegram DM with the findings, an inline diff preview, a GitHub compare link, and **inline Approve / Reject buttons**:
 
-- **`/llm/*`** — OpenRouter passthrough with auth injection. Pi's `OPENROUTER_API_KEY` is a dummy; the real key lives only in the sidecar and is injected on forward.
-- **`/search`** — Tavily-backed web search. Returned URL hosts get a short-lived permit so `/fetch` can retrieve them.
-- **`/fetch?url=...`** — fetches pages from allowlisted or search-permitted hosts, with a content-type filter.
-- **`/credentials/git`** — git credential helper returning short-lived GitHub App installation tokens (1hr TTL).
+- **Approve** → task stays at `approved`; the pushed branch remains on GitHub for you to review + merge.
+- **Reject** → task transitions to `rejected` and the orchestrator deletes the branch via the GitHub App API. No residue on the sandbox repo.
 
-Classic PATs are **removed from every production code path.** The orchestrator uses a [GitHub App](https://docs.github.com/en/apps) to mint fresh per-task installation tokens via JWT; the token flows through env → sidecar → git credential helper → git push. Leaked tokens expire within the hour.
+At **11 PM IST** by default (`PI_DIGEST_TIME_UTC=17:30`, configurable), era sends an **end-of-day digest** summarizing the previous 24h of tasks: counts by status, total tokens, total cost, per-task list.
 
-Every HTTP request the container makes is logged to the `events` table as a `http_request` event — an audit trail you can `sqlite3` into for any task.
+Two small quality-of-life commands:
+- **`/cancel <id>`** — cancels a queued task before it starts. (Running tasks hit their wall-clock cap naturally — docker-kill is M4+.)
+- **`/retry <id>`** — clones any prior task's description into a new queued task. Useful when a task fails or you want the same thing done again.
 
-**What's proven by passing tests + live smoke:**
-- [x] Container egress locked: non-allowlisted hosts return 403 at the sidecar / TCP RST at iptables
-- [x] Runner's OS env contains neither OpenRouter key nor GitHub token
-- [x] Pi's LLM calls route through `/llm/*` (verified via audit log)
-- [x] Git operations route through `/credentials/git` (verified via audit log)
-- [x] GitHub App tokens minted fresh per task, cached within TTL, refreshed when stale
+Everything from M2 still applies: containerized agent, iptables-locked egress, Tavily-backed search, OpenRouter passthrough, GitHub App tokens, audit log.
 
-**What M2 still does NOT have** (deferred to M3):
-- No prompt-injection diff-scan (reward-hacking detection was deferred; the runner's system prompt includes untrusted-content guidance but there's no post-hoc diff gate)
-- No approval gates or inline Telegram buttons
-- No EOD digest
+**What M3 adds (in tests and live):**
+- Diff-scan rule engine catches `removed_test`, `skip_directive`, `weakened_assertion`, `deleted_test_file` patterns across Go / Python / JS test conventions
+- GitHub compare API client fetches the diff for every pushed branch
+- Telegram client supports inline keyboards + callback queries; the handler routes button taps into the approval state machine
+- `approvals` table (dormant since M0) now records every approve/reject decision
+- Deterministic EOD digest renderer + cron-style scheduler goroutine
 
-**Rule of thumb for M2:** still use a throwaway sandbox repo. The security improvements mean a compromised Pi cannot read your secrets or exfil to arbitrary hosts — but Pi's `bash` tool still runs freely inside the container, and M2 has no diff-scan gate on reward-hacking patterns.
+**What M3 still does NOT have** (deferred to M4+):
+- No running-task cancellation (docker kill)
+- No VPS deployment helper
+- No PR creation
+- No option-A-style pre-push approval (runner commits + pushes unconditionally; diff-scan gates AFTER push)
 
 Full roadmap and implementation plan: [`docs/superpowers/plans/`](./docs/superpowers/plans/).
 
