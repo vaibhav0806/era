@@ -17,7 +17,7 @@ import (
 )
 
 // ErrNoResult is returned when a container finishes without emitting a
-// `RESULT branch=... summary=...` line on stdout.
+// `RESULT <json>` line on stdout.
 var ErrNoResult = errors.New("runner produced no RESULT line")
 
 // Docker runs tasks as Docker containers by shelling out to the `docker` CLI.
