@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vaibhav0806/era/internal/audit"
 	"github.com/vaibhav0806/era/internal/db"
 	"github.com/vaibhav0806/era/internal/queue"
 )
@@ -16,17 +17,18 @@ type fakeRunner struct {
 	summary   string
 	tokens    int64
 	costCents int
+	audits    []audit.Entry
 	err       error
 	calls     int
 	lastID    int64
 	lastDes   string
 }
 
-func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string) (string, string, int64, int, error) {
+func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string) (string, string, int64, int, []audit.Entry, error) {
 	f.calls++
 	f.lastID = taskID
 	f.lastDes = desc
-	return f.branch, f.summary, f.tokens, f.costCents, f.err
+	return f.branch, f.summary, f.tokens, f.costCents, f.audits, f.err
 }
 
 func newRunQueue(t *testing.T, r queue.Runner) (*queue.Queue, *db.Repo) {
@@ -208,4 +210,30 @@ func TestQueue_RunNext_RecordsTokensAndCost(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(4321), got.TokensUsed)
 	require.Equal(t, int64(9), got.CostCents)
+}
+
+func TestQueue_RunNext_PersistsAuditEntries(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{
+		branch: "b", summary: "s", tokens: 1, costCents: 1,
+		audits: []audit.Entry{
+			{Method: "GET", Path: "/health", Status: 200},
+			{Method: "CONNECT", Host: "github.com", Status: 200},
+		},
+	}
+	q, repo := newRunQueue(t, fr)
+	id, _ := q.CreateTask(ctx, "x")
+	_, err := q.RunNext(ctx)
+	require.NoError(t, err)
+
+	events, err := repo.ListEvents(ctx, id)
+	require.NoError(t, err)
+	// Expect: started, completed, + 2 http_request events = 4
+	httpReqs := 0
+	for _, e := range events {
+		if e.Kind == "http_request" {
+			httpReqs++
+		}
+	}
+	require.Equal(t, 2, httpReqs)
 }

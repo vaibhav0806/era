@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/vaibhav0806/era/internal/audit"
 )
 
 // ErrNoResult is returned when a container finishes without emitting a
@@ -43,6 +45,7 @@ type RunOutput struct {
 	Summary   string
 	Tokens    int64
 	CostCents int
+	Audits    []audit.Entry // sidecar AUDIT lines parsed from the combined log
 	RawLog    string
 }
 
@@ -96,6 +99,9 @@ func (d *Docker) Run(ctx context.Context, in RunInput) (*RunOutput, error) {
 		return nil, fmt.Errorf("%w; log:\n%s", err, combined.String())
 	}
 	out.RawLog = combined.String()
+	audit.Stream(strings.NewReader(combined.String()), func(e audit.Entry) {
+		out.Audits = append(out.Audits, e)
+	})
 	return out, nil
 }
 

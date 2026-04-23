@@ -1,16 +1,20 @@
 package runner
 
-import "context"
+import (
+	"context"
+
+	"github.com/vaibhav0806/era/internal/audit"
+)
 
 // QueueAdapter adapts a *Docker to the queue.Runner interface.
 type QueueAdapter struct {
 	D *Docker
 }
 
-func (q QueueAdapter) Run(ctx context.Context, taskID int64, description string) (string, string, int64, int, error) {
+func (q QueueAdapter) Run(ctx context.Context, taskID int64, description string) (string, string, int64, int, []audit.Entry, error) {
 	out, err := q.D.Run(ctx, RunInput{TaskID: taskID, Description: description})
 	if err != nil {
-		return "", "", 0, 0, err
+		return "", "", 0, 0, nil, err
 	}
-	return out.Branch, out.Summary, out.Tokens, out.CostCents, nil
+	return out.Branch, out.Summary, out.Tokens, out.CostCents, out.Audits, nil
 }

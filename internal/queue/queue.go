@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/vaibhav0806/era/internal/audit"
 	"github.com/vaibhav0806/era/internal/db"
 	"github.com/vaibhav0806/era/internal/telegram"
 )
 
 // Runner is wired in Task 15; nil-safe for Phase C.
 type Runner interface {
-	Run(ctx context.Context, taskID int64, description string) (branch, summary string, tokens int64, costCents int, err error)
+	Run(ctx context.Context, taskID int64, description string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
 // Notifier is called by RunNext when a task finishes. Both methods are
@@ -89,7 +90,7 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 
 	_ = q.repo.AppendEvent(ctx, t.ID, "started", "{}")
 
-	branch, summary, tokens, costCents, runErr := q.runner.Run(ctx, t.ID, t.Description)
+	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description)
 	if runErr != nil {
 		_ = q.repo.AppendEvent(ctx, t.ID, "failed", quoteJSON(runErr.Error()))
 		if ferr := q.repo.FailTask(ctx, t.ID, runErr.Error()); ferr != nil {
@@ -104,6 +105,10 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 	_ = q.repo.AppendEvent(ctx, t.ID, "completed", "{}")
 	if err := q.repo.CompleteTask(ctx, t.ID, branch, summary, tokens, int64(costCents)); err != nil {
 		return true, fmt.Errorf("complete task: %w", err)
+	}
+	for _, ae := range audits {
+		payload, _ := json.Marshal(ae)
+		_ = q.repo.AppendEvent(ctx, t.ID, "http_request", string(payload))
 	}
 	if q.notifier != nil {
 		q.notifier.NotifyCompleted(ctx, t.ID, branch, summary, tokens, costCents)
