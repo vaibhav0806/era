@@ -48,7 +48,7 @@ func TestE2E_M1_TinyCodingTask(t *testing.T) {
 		MaxWallSeconds:   180,
 	}
 	tokens := githubAppTokenSource(t)
-	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens, nil, "")
 
 	id, err := q.CreateTask(ctx, "add a file HELLO_ERA.md with the single line 'hello from era M1'")
 	require.NoError(t, err)

@@ -44,7 +44,7 @@ func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
 		MaxWallSeconds:   120,
 	}
 	tokens := githubAppTokenSource(t)
-	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens, nil, "")
 
 	id, err := q.CreateTask(ctx,
 		"create 20 different files in this repo, each named NOTE_<n>.md, "+

@@ -66,7 +66,7 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 		MaxWallSeconds:   180,
 	}
 	tokens := githubAppTokenSource(t)
-	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens, nil, "")
 
 	id, err := q.CreateTask(ctx, "add a file SMOKE_TEST.md with the single line 'smoke ok'")
 	require.NoError(t, err)

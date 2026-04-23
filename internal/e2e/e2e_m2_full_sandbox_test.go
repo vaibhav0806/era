@@ -56,7 +56,7 @@ func TestE2E_M2_FullSandbox(t *testing.T) {
 		MaxWallSeconds:   180,
 	}
 	tokens := githubAppTokenSource(t)
-	q := queue.New(r, runner.QueueAdapter{D: d}, tokens)
+	q := queue.New(r, runner.QueueAdapter{D: d}, tokens, nil, "")
 
 	id, err := q.CreateTask(ctx, "add a file M2_FULL_SANDBOX.md with the single line 'm2 full sandbox ok'")
 	require.NoError(t, err)
