@@ -36,9 +36,9 @@ func TestE2E_M1_RunawayAbortedByIterationCap(t *testing.T) {
 		GitHubPAT:        os.Getenv("PI_GITHUB_PAT"),
 		OpenRouterAPIKey: os.Getenv("PI_OPENROUTER_API_KEY"),
 		PiModel:          "moonshotai/kimi-k2.6",
-		MaxTokens:        100,         // guaranteed exceeded by first model response
-		MaxCostCents:     10,          // $0.10 budget — not the binding cap
-		MaxIterations:    3,           // not the binding cap
+		MaxTokens:        100, // guaranteed exceeded by first model response
+		MaxCostCents:     10,  // $0.10 budget — not the binding cap
+		MaxIterations:    3,   // not the binding cap
 		MaxWallSeconds:   120,
 	}
 	q := queue.New(r, runner.QueueAdapter{D: d})
