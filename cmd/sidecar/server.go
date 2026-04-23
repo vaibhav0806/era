@@ -19,6 +19,7 @@ func newServer(cfg *sidecarConfig) *http.Server {
 		testPermitHandler = newTestPermitHandler(allow)
 	}
 	searchHandler := newSearchHandler("", cfg.TavilyAPIKey, allow)
+	fetchHandler := newFetchHandler(allow)
 	proxy := newProxyHandler(allow)
 
 	// Route manually instead of using http.ServeMux. Go 1.22+ ServeMux
@@ -37,6 +38,8 @@ func newServer(cfg *sidecarConfig) *http.Server {
 			http.NotFound(w, r)
 		case "/search":
 			searchHandler.ServeHTTP(w, r)
+		case "/fetch":
+			fetchHandler.ServeHTTP(w, r)
 		default:
 			proxy.ServeHTTP(w, r)
 		}
