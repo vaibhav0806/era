@@ -53,7 +53,8 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	// sandbox; not a concern for M1.)
 	c := newCaps(ctx, *cfg)
 
-	p, err := newRealPi(ctx, cfg.PiModel, cfg.OpenRouterAPIKey, workspace, cfg.TaskDescription)
+	prompt := composePrompt(cfg.TaskDescription)
+	p, err := newRealPi(ctx, cfg.PiModel, cfg.OpenRouterAPIKey, workspace, prompt)
 	if err != nil {
 		return fmt.Errorf("pi spawn: %w", err)
 	}
