@@ -66,7 +66,7 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 	}
 	q := queue.New(r, runner.QueueAdapter{D: d})
 
-	id, err := q.CreateTask(ctx, "e2e smoke")
+	id, err := q.CreateTask(ctx, "add a file SMOKE_TEST.md with the single line 'smoke ok'")
 	require.NoError(t, err)
 
 	ran, err := q.RunNext(ctx)
@@ -77,7 +77,7 @@ func TestE2E_QueueToDockerToBranch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", task.Status, "task should be completed, got: status=%s error=%s", task.Status, task.Error.String)
 	require.NotEmpty(t, task.BranchName.String)
-	require.Contains(t, task.BranchName.String, fmt.Sprintf("agent/%d/dummy-", id))
+	require.Contains(t, task.BranchName.String, fmt.Sprintf("agent/%d/", id))
 
 	// Cleanup: delete the branch we created so the sandbox stays tidy.
 	t.Cleanup(func() {

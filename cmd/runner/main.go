@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -67,6 +68,12 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	slog.Info("pi done",
 		"tokens", tokens, "cost_usd", costUSD,
 		"iter", iters, "err", piErr)
+
+	// If Pi was aborted by a cap, don't commit or push — the task is failed
+	// and we don't want partial work landing on the sandbox.
+	if errors.Is(piErr, errCapExceeded) {
+		return piErr
+	}
 
 	commitErr := g.CommitAndPush(ctx, workspace)
 	switch {
