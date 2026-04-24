@@ -27,12 +27,16 @@ jobs:
         run: go test -race -count=1 ./...
       - name: build
         run: go build ./...
-      - name: phase smokes (non-docker)
+      - name: phase smokes (CI-compatible subset)
         run: |
           for f in scripts/smoke/phase_*.sh; do
             case "$f" in
               *phase_ab_tooling.sh|*phase_h_docker.sh|*phase_i_e2e.sh|*phase_j_sidecar.sh|*phase_k_netlock.sh|*phase_l_search.sh|*phase_m_secrets.sh)
                 echo "SKIP (docker): $f"
+                continue
+                ;;
+              *phase_b_db.sh|*phase_f_schema.sh)
+                echo "SKIP (needs goose binary): $f"
                 continue
                 ;;
             esac
