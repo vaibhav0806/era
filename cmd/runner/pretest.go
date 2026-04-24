@@ -11,6 +11,30 @@ import (
 	"time"
 )
 
+// MaybeRunPreCommitTest runs `make test` if the workspace has a `test` target.
+// Returns (skipped, error). skipped=true means no Makefile test target existed.
+// On test failure, error wraps the output in a "tests_failed: <out>" message
+// suitable for use as the runner's summary field.
+func MaybeRunPreCommitTest(ctx context.Context, workspace string) (bool, error) {
+	if !HasMakefileTest(workspace) {
+		return true, nil
+	}
+	out, err := RunMakefileTest(ctx, workspace)
+	if err != nil {
+		return false, fmt.Errorf("tests_failed: %s", truncate(out, 2000))
+	}
+	return false, nil
+}
+
+// truncate caps s at n bytes (byte-wise, may cut a rune — acceptable for log
+// summaries where the user can open the full branch anyway).
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
 // makefileTestTarget matches a `test:` target at the start of a line.
 // Excludes `test-*:`, `test_*:`, commented lines, and indented recipe lines.
 var makefileTestTarget = regexp.MustCompile(`(?m)^test\s*:`)

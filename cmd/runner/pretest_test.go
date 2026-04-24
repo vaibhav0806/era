@@ -62,3 +62,31 @@ func TestRunMakefileTest_Timeout(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "10-minute")
 }
+
+func TestPreCommitGate_NoMakefileTest_Skipped(t *testing.T) {
+	tmp := t.TempDir()
+	// No Makefile at all
+	skipped, runErr := MaybeRunPreCommitTest(context.Background(), tmp)
+	require.True(t, skipped)
+	require.NoError(t, runErr)
+}
+
+func TestPreCommitGate_PassingTest_Runs(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(tmp+"/Makefile",
+		[]byte("test:\n\t@echo ok\n"), 0644))
+	skipped, runErr := MaybeRunPreCommitTest(context.Background(), tmp)
+	require.False(t, skipped)
+	require.NoError(t, runErr)
+}
+
+func TestPreCommitGate_FailingTest_ReturnsError(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(tmp+"/Makefile",
+		[]byte("test:\n\t@echo boom && exit 1\n"), 0644))
+	skipped, runErr := MaybeRunPreCommitTest(context.Background(), tmp)
+	require.False(t, skipped)
+	require.Error(t, runErr)
+	require.Contains(t, runErr.Error(), "tests_failed")
+	require.Contains(t, runErr.Error(), "boom")
+}

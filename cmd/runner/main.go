@@ -76,6 +76,21 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 		return piErr
 	}
 
+	// M5 AD-3: pre-commit test gate. If repo has a `Makefile` with a `test`
+	// target, run it. Failure aborts the commit+push path with a clean failure
+	// result so the orchestrator marks the task failed and DMs the test output.
+	_, testErr := MaybeRunPreCommitTest(ctx, workspace)
+	if testErr != nil {
+		slog.Warn("pre-commit test failed", "err", testErr)
+		writeResult(os.Stdout, runResult{
+			Branch:    "",
+			Summary:   testErr.Error(),
+			Tokens:    tokens,
+			CostCents: int(math.Round(costUSD * 100)),
+		})
+		return testErr
+	}
+
 	commitErr := g.CommitAndPush(ctx, workspace)
 	switch {
 	case commitErr == nil:
