@@ -146,6 +146,25 @@ func (c *Client) AddLabel(ctx context.Context, repo string, number int, label st
 	return nil
 }
 
+// AddComment posts an issue comment on a PR.
+func (c *Client) AddComment(ctx context.Context, repo string, number int, body string) error {
+	payload, _ := json.Marshal(map[string]string{"body": body})
+	req, err := c.newReq(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/comments", repo, number), bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("add comment: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 201 {
+		rb, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("add comment %s#%d: %d %s", repo, number, resp.StatusCode, string(rb))
+	}
+	return nil
+}
+
 // ApprovePR submits an APPROVED review on the given PR. Body is optional prose.
 func (c *Client) ApprovePR(ctx context.Context, repo string, number int, body string) error {
 	payload, _ := json.Marshal(map[string]string{

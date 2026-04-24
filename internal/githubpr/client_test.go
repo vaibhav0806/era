@@ -157,3 +157,20 @@ func TestAddLabel_PostsToIssuesEndpoint(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "era-approved", labels[0])
 }
+
+func TestAddComment_PostsToIssueComments(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "/repos/owner/repo/issues/42/comments", r.URL.Path)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"id":1,"body":"rejected"}`))
+	}))
+	defer srv.Close()
+	c := githubpr.New(srv.URL, &fakeTokens{tok: "ghs_test"})
+
+	err := c.AddComment(context.Background(), "owner/repo", 42, "rejected")
+	require.NoError(t, err)
+	require.Equal(t, "rejected", gotBody["body"])
+}
