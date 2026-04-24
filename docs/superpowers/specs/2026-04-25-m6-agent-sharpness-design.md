@@ -191,6 +191,8 @@ Runner caps today come from environment vars read in the runner binary. M6 lets 
 - In `Docker.buildDockerArgs`, if a field is non-zero, emit `-e ERA_MAX_ITERATIONS=N` etc.
 - In `QueueAdapter.Run`, after looking up the profile for the task, populate those fields.
 
+**`RetryTask` profile inheritance.** `RetryTask` in `internal/queue/queue.go` (~line 489) clones the description of a prior task. In M6, the retry should inherit the original task's `budget_profile` so a `deep` task stays `deep` on retry. Update the underlying sqlc query (or add `CloneTask`) to copy `description + target_repo + budget_profile` atomically. Spec calls this out so the implementer doesn't default every retry to `"default"`.
+
 Existing `.env` and `deploy/env.template` defaults bump to match the new `default` profile:
 
 ```
@@ -290,7 +292,22 @@ if err := n.repo.SetCompletionMessageID(ctx, id, msgID); err != nil {
 }
 ```
 
-`tgNotifier` struct gains a `repo *db.Repo` field, wired in main.go construction.
+**`tgNotifier` struct renames + adds fields.** Today `tgNotifier` has a single `repo string // "owner/repo"` field (the sandbox repo, used by NotifyCompleted's URL fallback). AI does TWO changes:
+
+1. **Rename** existing `repo string` → `sandboxRepo string`. Every call site inside `tgNotifier` methods that reads `n.repo` becomes `n.sandboxRepo`. (Grep: `cmd/orchestrator/main.go` line ~181 in NotifyCompleted.)
+2. **Add** new `repo *db.Repo` field for calling `SetCompletionMessageID`. Wired via struct literal in `main.go` where tgNotifier is constructed.
+
+```go
+type tgNotifier struct {
+    client       telegram.Client
+    chatID       int64
+    sandboxRepo  string        // renamed from `repo` in AI
+    repo         *db.Repo      // new in AI
+    progressMsgs sync.Map      // added in AJ — taskID (int64) → message_id (int64)
+}
+```
+
+After the rename, the two "repo" identifiers don't collide: `sandboxRepo` is the remote "owner/repo" string; `repo` is the DB handle.
 
 **Reply composition** — `internal/queue/reply_compose.go`:
 
@@ -325,6 +342,19 @@ func ComposeReplyPrompt(orig db.Task, replyBody string) string {
     return b.String()
 }
 ```
+
+**Handler struct changes.** Today `type Handler struct { client Client; ops Ops }`. AI needs two new fields so `handleReply` can (a) look up the original task by `completion_message_id` and (b) fall back to the sandbox repo when `orig.TargetRepo == ""`:
+
+```go
+type Handler struct {
+    client      Client
+    ops         Ops         // queue, accepted as a narrow interface
+    repo        *db.Repo    // new in AI — for GetTaskByCompletionMessageID
+    sandboxRepo string      // new in AI — for reply-DM fallback
+}
+```
+
+`NewHandler` gains two params; `cmd/orchestrator/main.go` threads `repo` and `cfg.GitHubSandboxRepo` into the construction.
 
 **Handler routing** — in `telegram/handler.go`:
 
@@ -476,6 +506,8 @@ func (d *Docker) Run(ctx context.Context, in RunInput, onProgress ProgressCallba
 
 **Queue side — `internal/queue/queue.go`:**
 
+Note on layering: `internal/runner/docker.go` defines its own `ProgressEvent` type, and `internal/queue/queue.go` defines its own mirror `ProgressEvent`. This duplication is **intentional** — the runner package cannot import queue (and shouldn't; runner is a lower-level primitive). The queue-side ProgressEvent is translated in `RunNext`'s progress callback from the runner-side one. Do NOT try to deduplicate during implementation — that introduces a circular import.
+
 ```go
 type ProgressNotifier interface {
     NotifyProgress(ctx context.Context, taskID int64, ev ProgressEvent)
@@ -529,15 +561,21 @@ func (n *tgNotifier) NotifyProgress(ctx context.Context, id int64, ev queue.Prog
 
 Progress map uses `sync.Map` for concurrent safety (runner fires callbacks from a goroutine). On task terminal (completed/failed/cancelled/needs_review), the progress message is NOT deleted — it stays on Telegram as a historical trace; the terminal DM is a new message.
 
-**Telegram client — new EditMessageText:**
+**Telegram client — new EditMessageText.**
+
+Note: `internal/telegram/client.go` currently declares `EditMessageText(ctx, chatID int64, messageID int, text string) error` (with `messageID int`, matching go-telegram-bot-api/v5 which types message IDs as `int`). M6 AJ can either (a) keep the existing `int` signature and convert `int64` message IDs down at call sites, or (b) change the interface to `int64` and use `int(messageID)` inside the wrapper. **Pick (a)** — avoids a second interface break on top of SendMessage. Telegram message IDs fit comfortably in `int` (int32 min + positive values only in practice).
+
+The new call from tgNotifier.NotifyProgress becomes:
 
 ```go
-func (c *tgClient) EditMessageText(ctx context.Context, chatID, messageID int64, body string) error {
-    editMsg := tgbotapi.NewEditMessageText(chatID, int(messageID), body)
-    _, err := c.bot.Send(editMsg)
-    return err
+if existing, ok := n.progressMsgs.Load(id); ok {
+    msgID := existing.(int64)
+    if err := n.client.EditMessageText(ctx, n.chatID, int(msgID), body); err != nil { ... }
+    return
 }
 ```
+
+The `progressMsgs` map still stores `int64` (matching the return type of `SendMessage`), but casts to `int` at the EditMessageText boundary. Fake client accepts `int` directly.
 
 Fake client implements as a no-op store (records edits for assertion).
 
@@ -568,27 +606,38 @@ UPDATE tasks SET read_only = ? WHERE id = ?;
 
 Not strictly needed for the happy path (set at create time via an extended `CreateTask` variant), but useful for future `/ask`-to-`/task` promotions. Current plan uses a direct CreateTask variant.
 
-**Queue method:**
+**Queue method.**
+
+The naïve three-call version has a race: between `CreateTask` and `SetReadOnly`, `RunNext` could pick up the task with `read_only=0` and run it writable. Even at the 2-second poll interval, the race is real. Ship an atomic variant instead:
+
+```sql
+-- name: CreateAskTask :one
+INSERT INTO tasks (description, target_repo, budget_profile, read_only, status)
+VALUES (?, ?, 'quick', 1, 'queued')
+RETURNING *;
+```
+
+Repo wrapper:
 
 ```go
-// CreateAskTask queues a read-only task with the "quick" budget profile.
-// Runner will NOT commit/push anything; result is Pi's final prose as summary.
+func (r *Repo) CreateAskTask(ctx context.Context, desc, targetRepo string) (Task, error) {
+    return r.q.CreateAskTask(ctx, CreateAskTaskParams{Description: desc, TargetRepo: targetRepo})
+}
+```
+
+Queue method is then a thin wrapper returning the task ID:
+
+```go
 func (q *Queue) CreateAskTask(ctx context.Context, desc, targetRepo string) (int64, error) {
-    task, err := q.repo.CreateTask(ctx, desc, targetRepo)
+    task, err := q.repo.CreateAskTask(ctx, desc, targetRepo)
     if err != nil {
         return 0, err
-    }
-    if err := q.repo.SetReadOnly(ctx, task.ID, true); err != nil {
-        return task.ID, fmt.Errorf("set read_only: %w", err)
-    }
-    if err := q.repo.SetBudgetProfile(ctx, task.ID, "quick"); err != nil {
-        return task.ID, fmt.Errorf("set budget profile: %w", err)
     }
     return task.ID, nil
 }
 ```
 
-(A single `CreateTaskEx(desc, repo, profile, readOnly)` would be tidier — spec allows implementation to refactor into a single variadic-options constructor during plan phase.)
+One migration, one sqlc query, one insert. No race window.
 
 **Handler `/ask` route — `internal/telegram/handler.go`:**
 
@@ -725,7 +774,7 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
         if err != nil { return Stats{}, err }
         targets[i].CostCents = cost
     }
-    q.mu sync — omitted, Queue.Stats is safe to call concurrently because DB handles its own locking.
+    // No mutex needed — DB handles its own locking; Queue.Stats is read-only.
     pending, err := q.repo.CountQueuedTasks(ctx)
     if err != nil { return Stats{}, err }
     s.PendingQueue = pending
