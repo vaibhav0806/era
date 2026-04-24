@@ -19,9 +19,30 @@ type fakePRCreator struct {
 	closeErr        error
 	defaultBranch   string
 	defaultBranchEr error
+	approved        []approvedRecord
+	approveErr      error
+	labeled         []labeledRecord
+	labelErr        error
+	commented       []commentedRecord
+	commentErr      error
 }
 type closedRecord struct {
 	Repo   string
+	Number int
+}
+type approvedRecord struct {
+	Repo   string
+	Body   string
+	Number int
+}
+type labeledRecord struct {
+	Repo   string
+	Label  string
+	Number int
+}
+type commentedRecord struct {
+	Repo   string
+	Body   string
 	Number int
 }
 
@@ -42,6 +63,24 @@ func (f *fakePRCreator) DefaultBranch(ctx context.Context, repo string) (string,
 		return "main", f.defaultBranchEr
 	}
 	return f.defaultBranch, f.defaultBranchEr
+}
+func (f *fakePRCreator) ApprovePR(ctx context.Context, repo string, n int, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.approved = append(f.approved, approvedRecord{repo, body, n})
+	return f.approveErr
+}
+func (f *fakePRCreator) AddLabel(ctx context.Context, repo string, n int, label string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.labeled = append(f.labeled, labeledRecord{repo, label, n})
+	return f.labelErr
+}
+func (f *fakePRCreator) AddComment(ctx context.Context, repo string, n int, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commented = append(f.commented, commentedRecord{repo, body, n})
+	return f.commentErr
 }
 
 func TestQueue_RunNext_OpensPROnSuccess(t *testing.T) {

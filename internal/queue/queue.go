@@ -72,6 +72,9 @@ type PRCreator interface {
 	Create(ctx context.Context, args githubpr.CreateArgs) (*githubpr.PR, error)
 	Close(ctx context.Context, repo string, number int) error
 	DefaultBranch(ctx context.Context, repo string) (string, error)
+	ApprovePR(ctx context.Context, repo string, number int, body string) error
+	AddLabel(ctx context.Context, repo string, number int, label string) error
+	AddComment(ctx context.Context, repo string, number int, body string) error
 }
 
 type Queue struct {
