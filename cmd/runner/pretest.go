@@ -2,9 +2,13 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 // makefileTestTarget matches a `test:` target at the start of a line.
@@ -26,4 +30,19 @@ func HasMakefileTest(workspace string) bool {
 		}
 	}
 	return false
+}
+
+// RunMakefileTest runs `make test` in workspace with a 10-minute hard cap.
+// Returns combined stdout+stderr plus any error. Non-zero exit from make is
+// surfaced as error; output is always returned regardless.
+func RunMakefileTest(ctx context.Context, workspace string) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "make", "test")
+	cmd.Dir = workspace
+	out, err := cmd.CombinedOutput()
+	if cctx.Err() == context.DeadlineExceeded {
+		return string(out), fmt.Errorf("pre-commit test exceeded 10-minute cap")
+	}
+	return string(out), err
 }

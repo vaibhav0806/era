@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -30,4 +31,34 @@ func TestHasMakefileTest_CommentedTargetNotMatched(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.WriteFile(tmp+"/Makefile", []byte("# test:\n\t@echo x\n"), 0644))
 	require.False(t, HasMakefileTest(tmp))
+}
+
+func TestRunMakefileTest_Pass(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(tmp+"/Makefile",
+		[]byte("test:\n\t@echo ok\n"), 0644))
+	out, err := RunMakefileTest(context.Background(), tmp)
+	require.NoError(t, err)
+	require.Contains(t, out, "ok")
+}
+
+func TestRunMakefileTest_Fail(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(tmp+"/Makefile",
+		[]byte("test:\n\t@echo fail && exit 1\n"), 0644))
+	out, err := RunMakefileTest(context.Background(), tmp)
+	require.Error(t, err)
+	require.Contains(t, out, "fail")
+}
+
+func TestRunMakefileTest_Timeout(t *testing.T) {
+	if os.Getenv("ERA_TEST_LONG") != "1" {
+		t.Skip("set ERA_TEST_LONG=1 to run the 11-minute timeout test")
+	}
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(tmp+"/Makefile",
+		[]byte("test:\n\tsleep 660\n"), 0644))
+	_, err := RunMakefileTest(context.Background(), tmp)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "10-minute")
 }
