@@ -51,9 +51,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    # M5-AF-3: deploy disabled until we confirm test gate is stable.
-    # Re-enable in task AF-5 by removing the `false && ` prefix.
-    if: false && github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
       - name: SSH setup
         env:
