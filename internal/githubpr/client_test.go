@@ -138,3 +138,22 @@ func TestApprovePR_403Error(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "403")
 }
+
+func TestAddLabel_PostsToIssuesEndpoint(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "/repos/owner/repo/issues/42/labels", r.URL.Path)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`[{"id":1,"name":"era-approved"}]`))
+	}))
+	defer srv.Close()
+	c := githubpr.New(srv.URL, &fakeTokens{tok: "ghs_test"})
+
+	err := c.AddLabel(context.Background(), "owner/repo", 42, "era-approved")
+	require.NoError(t, err)
+	labels, ok := gotBody["labels"].([]any)
+	require.True(t, ok)
+	require.Equal(t, "era-approved", labels[0])
+}

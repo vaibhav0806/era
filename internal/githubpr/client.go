@@ -125,6 +125,27 @@ func (c *Client) Close(ctx context.Context, repo string, number int) error {
 	return nil
 }
 
+// AddLabel attaches a label to a PR. PRs are issues in GitHub's model for
+// labels, so this hits the /issues/ endpoint. GitHub auto-creates labels that
+// don't pre-exist.
+func (c *Client) AddLabel(ctx context.Context, repo string, number int, label string) error {
+	payload, _ := json.Marshal(map[string][]string{"labels": {label}})
+	req, err := c.newReq(ctx, "POST", fmt.Sprintf("/repos/%s/issues/%d/labels", repo, number), bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("add label: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		rb, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("add label %s#%d %s: %d %s", repo, number, label, resp.StatusCode, string(rb))
+	}
+	return nil
+}
+
 // ApprovePR submits an APPROVED review on the given PR. Body is optional prose.
 func (c *Client) ApprovePR(ctx context.Context, repo string, number int, body string) error {
 	payload, _ := json.Marshal(map[string]string{
