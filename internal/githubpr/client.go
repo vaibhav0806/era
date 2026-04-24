@@ -134,7 +134,7 @@ func (c *Client) newReq(ctx context.Context, method, path string, body io.Reader
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "token "+tok)
+	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

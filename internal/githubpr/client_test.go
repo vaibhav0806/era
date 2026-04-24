@@ -24,7 +24,7 @@ func TestDefaultBranch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "GET", r.Method)
 		require.Equal(t, "/repos/owner/repo", r.URL.Path)
-		require.Equal(t, "token ghs_test", r.Header.Get("Authorization"))
+		require.Equal(t, "Bearer ghs_test", r.Header.Get("Authorization"))
 		require.Equal(t, "application/vnd.github+json", r.Header.Get("Accept"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"default_branch":"master"}`))
