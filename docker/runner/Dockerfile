@@ -4,6 +4,15 @@ FROM node:22-alpine
 # Phase K (Phase J doesn't use it yet but installing now avoids a rebuild).
 RUN apk add --no-cache git bash ca-certificates coreutils curl iptables wget
 
+# M5 tooling bake: common language toolchains + native build deps + utilities.
+# Keeps egress locked down (no runtime apk fetches) and unblocks Python/Rust/Go
+# tasks that would otherwise try to reach dl-cdn.alpinelinux.org (not in allowlist).
+RUN apk add --no-cache \
+    python3 py3-pip py3-virtualenv rust cargo go \
+    build-base musl-dev pkgconf openssl-dev libffi-dev python3-dev sqlite-dev zlib-dev \
+    sqlite tar gzip unzip tree ripgrep fd \
+    && rm -rf /var/cache/apk/*
+
 ARG PI_VERSION=latest
 RUN npm install -g @mariozechner/pi-coding-agent@${PI_VERSION} \
     && pi --version > /pi-version.txt
