@@ -56,6 +56,49 @@ func (q *Queries) ClaimNextQueuedTask(ctx context.Context) (Task, error) {
 	return i, err
 }
 
+const countQueuedTasks = `-- name: CountQueuedTasks :one
+SELECT COUNT(*) AS count FROM tasks WHERE status = 'queued'
+`
+
+func (q *Queries) CountQueuedTasks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countQueuedTasks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTasksByStatusSince = `-- name: CountTasksByStatusSince :many
+SELECT status, COUNT(*) AS count FROM tasks WHERE created_at >= ? GROUP BY status
+`
+
+type CountTasksByStatusSinceRow struct {
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+func (q *Queries) CountTasksByStatusSince(ctx context.Context, createdAt time.Time) ([]CountTasksByStatusSinceRow, error) {
+	rows, err := q.db.QueryContext(ctx, countTasksByStatusSince, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountTasksByStatusSinceRow
+	for rows.Next() {
+		var i CountTasksByStatusSinceRow
+		if err := rows.Scan(&i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createAskTask = `-- name: CreateAskTask :one
 INSERT INTO tasks (description, target_repo, budget_profile, read_only, status)
 VALUES (?, ?, 'quick', 1, 'queued')
@@ -453,4 +496,26 @@ type SetTaskStatusParams struct {
 func (q *Queries) SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setTaskStatus, arg.Status, arg.ID)
 	return err
+}
+
+const sumCostCentsSince = `-- name: SumCostCentsSince :one
+SELECT COALESCE(SUM(cost_cents), 0) AS total FROM tasks WHERE created_at >= ?
+`
+
+func (q *Queries) SumCostCentsSince(ctx context.Context, createdAt time.Time) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, sumCostCentsSince, createdAt)
+	var total interface{}
+	err := row.Scan(&total)
+	return total, err
+}
+
+const sumTokensSince = `-- name: SumTokensSince :one
+SELECT COALESCE(SUM(tokens_used), 0) AS total FROM tasks WHERE created_at >= ?
+`
+
+func (q *Queries) SumTokensSince(ctx context.Context, createdAt time.Time) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, sumTokensSince, createdAt)
+	var total interface{}
+	err := row.Scan(&total)
+	return total, err
 }

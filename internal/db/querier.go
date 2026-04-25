@@ -7,11 +7,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 type Querier interface {
 	AppendEvent(ctx context.Context, arg AppendEventParams) error
 	ClaimNextQueuedTask(ctx context.Context) (Task, error)
+	CountQueuedTasks(ctx context.Context) (int64, error)
+	CountTasksByStatusSince(ctx context.Context, createdAt time.Time) ([]CountTasksByStatusSinceRow, error)
 	CreateAskTask(ctx context.Context, arg CreateAskTaskParams) (Task, error)
 	// queries/tasks.sql
 	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
@@ -28,6 +31,8 @@ type Querier interface {
 	SetCompletionMessageID(ctx context.Context, arg SetCompletionMessageIDParams) error
 	SetPRNumber(ctx context.Context, arg SetPRNumberParams) error
 	SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) error
+	SumCostCentsSince(ctx context.Context, createdAt time.Time) (interface{}, error)
+	SumTokensSince(ctx context.Context, createdAt time.Time) (interface{}, error)
 }
 
 var _ Querier = (*Queries)(nil)

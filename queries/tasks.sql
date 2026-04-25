@@ -68,3 +68,15 @@ SELECT * FROM tasks WHERE completion_message_id = ? LIMIT 1;
 INSERT INTO tasks (description, target_repo, budget_profile, read_only, status)
 VALUES (?, ?, 'quick', 1, 'queued')
 RETURNING *;
+
+-- name: CountTasksByStatusSince :many
+SELECT status, COUNT(*) AS count FROM tasks WHERE created_at >= ? GROUP BY status;
+
+-- name: SumTokensSince :one
+SELECT COALESCE(SUM(tokens_used), 0) AS total FROM tasks WHERE created_at >= ?;
+
+-- name: SumCostCentsSince :one
+SELECT COALESCE(SUM(cost_cents), 0) AS total FROM tasks WHERE created_at >= ?;
+
+-- name: CountQueuedTasks :one
+SELECT COUNT(*) AS count FROM tasks WHERE status = 'queued';

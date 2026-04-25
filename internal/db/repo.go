@@ -117,3 +117,29 @@ func (r *Repo) CreateAskTask(ctx context.Context, desc, targetRepo string) (Task
 		TargetRepo:  targetRepo,
 	})
 }
+
+func (r *Repo) CountTasksByStatusSince(ctx context.Context, since time.Time) ([]CountTasksByStatusSinceRow, error) {
+	return r.q.CountTasksByStatusSince(ctx, since)
+}
+
+func (r *Repo) SumTokensSince(ctx context.Context, since time.Time) (int64, error) {
+	v, err := r.q.SumTokensSince(ctx, since)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := v.(int64)
+	return n, nil
+}
+
+func (r *Repo) SumCostCentsSince(ctx context.Context, since time.Time) (int64, error) {
+	v, err := r.q.SumCostCentsSince(ctx, since)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := v.(int64)
+	return n, nil
+}
+
+func (r *Repo) CountQueuedTasks(ctx context.Context) (int64, error) {
+	return r.q.CountQueuedTasks(ctx)
+}
