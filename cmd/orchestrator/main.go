@@ -109,9 +109,10 @@ func main() {
 		fail(err)
 	}
 	q.SetNotifier(&tgNotifier{
-		client: client,
-		chatID: cfg.TelegramAllowedUserID,
-		repo:   cfg.GitHubSandboxRepo,
+		client:      client,
+		chatID:      cfg.TelegramAllowedUserID,
+		sandboxRepo: cfg.GitHubSandboxRepo,
+		repo:        repo,
 	})
 	handler := telegram.NewHandler(client, q)
 
@@ -172,14 +173,15 @@ func fail(err error) {
 }
 
 type tgNotifier struct {
-	client telegram.Client
-	chatID int64
-	repo   string // "owner/repo"
+	client      telegram.Client
+	chatID      int64
+	sandboxRepo string   // "owner/repo"
+	repo        *db.Repo // for SetCompletionMessageID
 }
 
 func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch, prURL, summary string, tokens int64, costCents int) {
 	if repo == "" {
-		repo = n.repo
+		repo = n.sandboxRepo
 	}
 	var msg string
 	if branch == "" {
@@ -191,9 +193,13 @@ func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch
 			id, branch, prURL, truncateForTelegram(summary, 3500), tokens, float64(costCents)/100.0,
 		)
 	}
-	_, err := n.client.SendMessage(ctx, n.chatID, msg)
+	msgID, err := n.client.SendMessage(ctx, n.chatID, msg)
 	if err != nil {
 		slog.Error("notify completed", "err", err, "task", id)
+		return
+	}
+	if err := n.repo.SetCompletionMessageID(ctx, id, msgID); err != nil {
+		slog.Warn("set completion message id", "err", err, "task", id)
 	}
 }
 
