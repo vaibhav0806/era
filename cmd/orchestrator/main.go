@@ -336,7 +336,7 @@ func truncateForTelegram(s string, budget int) string {
 }
 
 // compile-time assertions that tgNotifier satisfies both notifier interfaces
-var _ queue.Notifier         = (*tgNotifier)(nil)
+var _ queue.Notifier = (*tgNotifier)(nil)
 var _ queue.ProgressNotifier = (*tgNotifier)(nil)
 
 // runDigestScheduler fires once per day at hour:minute UTC and sends a
