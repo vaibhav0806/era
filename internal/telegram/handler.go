@@ -7,30 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/vaibhav0806/era/internal/budget"
 )
-
-// knownBudgetProfiles is a local copy of the valid profile names to avoid
-// importing internal/queue (which already imports internal/telegram).
-var knownBudgetProfiles = map[string]bool{"quick": true, "default": true, "deep": true}
-
-// parseBudgetFlag strips a leading `--budget=NAME` token from body.
-// Returns (profileName, cleanedBody). Unknown profile names fall back to
-// "default" with the body preserved as-is.
-func parseBudgetFlag(body string) (string, string) {
-	body = strings.TrimSpace(body)
-	if !strings.HasPrefix(body, "--budget=") {
-		return "default", body
-	}
-	end := strings.IndexByte(body, ' ')
-	if end < 0 {
-		return "default", body
-	}
-	name := strings.TrimPrefix(body[:end], "--budget=")
-	if !knownBudgetProfiles[name] {
-		return "default", body
-	}
-	return name, strings.TrimSpace(body[end+1:])
-}
 
 // repoFmtRE matches owner/repo, allowing word chars, dots, dashes.
 // Examples it matches: vaibhav0806/era, alice/foo-bar, x/y.z
@@ -99,7 +78,7 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 		if body == "" {
 			return h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
 		}
-		profile, body := parseBudgetFlag(body)
+		profile, body := budget.ParseBudgetFlag(body)
 		repo, desc := parseTaskArgs(body)
 		if desc == "" {
 			return h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
