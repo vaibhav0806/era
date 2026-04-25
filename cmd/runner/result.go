@@ -15,6 +15,21 @@ type runResult struct {
 	CostCents int    `json:"cost_cents"`
 }
 
+type runProgress struct {
+	Iter      int    `json:"iter"`
+	Action    string `json:"action"`
+	Tokens    int64  `json:"tokens_cum"`
+	CostCents int    `json:"cost_cents_cum"`
+}
+
+func writeProgress(w io.Writer, p runProgress) {
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return // best-effort
+	}
+	fmt.Fprintf(w, "PROGRESS %s\n", payload)
+}
+
 // writeResult emits the RESULT line to w as JSON so prose summaries with
 // spaces and newlines round-trip cleanly.
 func writeResult(w io.Writer, r runResult) {

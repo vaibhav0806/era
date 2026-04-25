@@ -42,6 +42,23 @@ func TestWriteResult_EmptySummaryOK(t *testing.T) {
 	require.Equal(t, "", got.Summary)
 }
 
+func TestWriteProgress_EmitsJSONLine(t *testing.T) {
+	var buf bytes.Buffer
+	writeProgress(&buf, runProgress{
+		Iter: 7, Action: "write", Tokens: 8200, CostCents: 3,
+	})
+	line := buf.String()
+	require.True(t, strings.HasPrefix(line, "PROGRESS "))
+	require.True(t, strings.HasSuffix(line, "\n"))
+	payload := strings.TrimSuffix(strings.TrimPrefix(line, "PROGRESS "), "\n")
+	var got runProgress
+	require.NoError(t, json.Unmarshal([]byte(payload), &got))
+	require.Equal(t, 7, got.Iter)
+	require.Equal(t, "write", got.Action)
+	require.Equal(t, int64(8200), got.Tokens)
+	require.Equal(t, 3, got.CostCents)
+}
+
 func TestFinalSummary_UsesLastTextWhenPresent(t *testing.T) {
 	s := &runSummary{LastText: "Pi said something useful"}
 	require.Equal(t, "Pi said something useful", finalSummary(s, nil))
