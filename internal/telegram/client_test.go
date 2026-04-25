@@ -14,9 +14,11 @@ type FakeClient struct {
 
 	// text messages
 	Sent []struct {
-		ChatID int64
-		Text   string
+		ChatID    int64
+		Text      string
+		MessageID int64
 	}
+	nextMsgID int64
 
 	// button messages
 	SentWithButtons []struct {
@@ -52,14 +54,16 @@ func NewFakeClient() *FakeClient {
 	}
 }
 
-func (f *FakeClient) SendMessage(ctx context.Context, chatID int64, text string) error {
+func (f *FakeClient) SendMessage(ctx context.Context, chatID int64, text string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.nextMsgID++
 	f.Sent = append(f.Sent, struct {
-		ChatID int64
-		Text   string
-	}{chatID, text})
-	return nil
+		ChatID    int64
+		Text      string
+		MessageID int64
+	}{chatID, text, f.nextMsgID})
+	return f.nextMsgID, nil
 }
 
 func (f *FakeClient) SendMessageWithButtons(ctx context.Context, chatID int64, text string, buttons [][]InlineButton) (int, error) {
@@ -183,7 +187,9 @@ func TestFakeClient_RoundTrip(t *testing.T) {
 	got := <-updates
 	require.Equal(t, "hi", got.Text)
 
-	require.NoError(t, f.SendMessage(ctx, 1, "hello"))
+	msgID, err := f.SendMessage(ctx, 1, "hello")
+	require.NoError(t, err)
+	require.Greater(t, msgID, int64(0))
 	require.Len(t, f.Sent, 1)
 	require.Equal(t, "hello", f.Sent[0].Text)
 }

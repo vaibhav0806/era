@@ -76,41 +76,51 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 	case strings.HasPrefix(text, "/task"):
 		body := strings.TrimSpace(strings.TrimPrefix(text, "/task"))
 		if body == "" {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
+			_, err := h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
+			return err
 		}
 		profile, body := budget.ParseBudgetFlag(body)
 		repo, desc := parseTaskArgs(body)
 		if desc == "" {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
+			_, err := h.client.SendMessage(ctx, u.ChatID, "usage: /task [--budget=quick|default|deep] [owner/repo] <description>")
+			return err
 		}
 		id, err := h.ops.CreateTask(ctx, desc, repo, profile)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			return err
 		}
 		if repo != "" {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued (repo: %s, profile: %s)", id, repo, profile))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued (repo: %s, profile: %s)", id, repo, profile))
+			return err
 		}
-		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued (profile: %s)", id, profile))
+		_, err = h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d queued (profile: %s)", id, profile))
+		return err
 
 	case strings.HasPrefix(text, "/status "):
 		raw := strings.TrimSpace(strings.TrimPrefix(text, "/status "))
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /status <task-id>")
+			_, err := h.client.SendMessage(ctx, u.ChatID, "usage: /status <task-id>")
+			return err
 		}
 		status, err := h.ops.TaskStatus(ctx, id)
 		if errors.Is(err, ErrTaskNotFound) {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d not found", id))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d not found", id))
+			return err
 		}
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			return err
 		}
-		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d: %s", id, status))
+		_, err = h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d: %s", id, status))
+		return err
 
 	case text == "/list":
 		items, err := h.ops.ListRecent(ctx, 10)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			return err
 		}
 		var b strings.Builder
 		if len(items) == 0 {
@@ -119,33 +129,41 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 		for _, it := range items {
 			fmt.Fprintf(&b, "#%d [%s] %s\n", it.ID, it.Status, it.Description)
 		}
-		return h.client.SendMessage(ctx, u.ChatID, b.String())
+		_, err = h.client.SendMessage(ctx, u.ChatID, b.String())
+		return err
 
 	case strings.HasPrefix(text, "/cancel "):
 		raw := strings.TrimSpace(strings.TrimPrefix(text, "/cancel "))
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /cancel <task-id>")
+			_, err := h.client.SendMessage(ctx, u.ChatID, "usage: /cancel <task-id>")
+			return err
 		}
 		if err := h.ops.CancelTask(ctx, id); err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("cancel #%d failed: %v", id, err))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("cancel #%d failed: %v", id, err))
+			return err
 		}
-		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d cancel requested", id))
+		_, err = h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("task #%d cancel requested", id))
+		return err
 
 	case strings.HasPrefix(text, "/retry "):
 		raw := strings.TrimSpace(strings.TrimPrefix(text, "/retry "))
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, "usage: /retry <task-id>")
+			_, err := h.client.SendMessage(ctx, u.ChatID, "usage: /retry <task-id>")
+			return err
 		}
 		newID, err := h.ops.RetryTask(ctx, id)
 		if err != nil {
-			return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry failed: %v", err))
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry failed: %v", err))
+			return err
 		}
-		return h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry queued as #%d (from #%d)", newID, id))
+		_, err = h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry queued as #%d (from #%d)", newID, id))
+		return err
 
 	default:
-		return h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list, /cancel, /retry")
+		_, err := h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list, /cancel, /retry")
+		return err
 	}
 }
 

@@ -33,7 +33,7 @@ type Update struct {
 }
 
 type Client interface {
-	SendMessage(ctx context.Context, chatID int64, text string) error
+	SendMessage(ctx context.Context, chatID int64, text string) (int64, error)
 	SendMessageWithButtons(ctx context.Context, chatID int64, text string, buttons [][]InlineButton) (messageID int, err error)
 	EditMessageText(ctx context.Context, chatID int64, messageID int, text string) error
 	AnswerCallback(ctx context.Context, callbackID string, text string) error
@@ -56,14 +56,15 @@ func NewClient(token string, allowedUserID int64) (Client, error) {
 	return &realClient{api: api, allowedUserID: allowedUserID}, nil
 }
 
-func (c *realClient) SendMessage(ctx context.Context, chatID int64, text string) error {
+func (c *realClient) SendMessage(ctx context.Context, chatID int64, text string) (int64, error) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	// Plain text is safer than MarkdownV2 for arbitrary content; MarkdownV2
 	// requires escaping many characters and we'd rather not fight it for M0.
-	if _, err := c.api.Send(msg); err != nil {
-		return fmt.Errorf("telegram send: %w", err)
+	sent, err := c.api.Send(msg)
+	if err != nil {
+		return 0, fmt.Errorf("telegram send: %w", err)
 	}
-	return nil
+	return int64(sent.MessageID), nil
 }
 
 func (c *realClient) SendMessageWithButtons(ctx context.Context, chatID int64, text string, buttons [][]InlineButton) (int, error) {

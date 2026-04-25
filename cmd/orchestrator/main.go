@@ -191,21 +191,24 @@ func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch
 			id, branch, prURL, truncateForTelegram(summary, 3500), tokens, float64(costCents)/100.0,
 		)
 	}
-	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
+	_, err := n.client.SendMessage(ctx, n.chatID, msg)
+	if err != nil {
 		slog.Error("notify completed", "err", err, "task", id)
 	}
 }
 
 func (n *tgNotifier) NotifyFailed(ctx context.Context, id int64, reason string) {
 	msg := fmt.Sprintf("task #%d failed: %s", id, truncateForTelegram(scrubSecrets(reason), 3500))
-	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
+	_, err := n.client.SendMessage(ctx, n.chatID, msg)
+	if err != nil {
 		slog.Error("notify failed", "err", err, "task", id)
 	}
 }
 
 func (n *tgNotifier) NotifyCancelled(ctx context.Context, id int64) {
 	msg := fmt.Sprintf("task #%d cancelled mid-run", id)
-	if err := n.client.SendMessage(ctx, n.chatID, msg); err != nil {
+	_, err := n.client.SendMessage(ctx, n.chatID, msg)
+	if err != nil {
 		slog.Error("notify cancelled", "err", err, "task", id)
 	}
 }
@@ -332,7 +335,8 @@ func runDigestScheduler(ctx context.Context, hour, minute int, repo *db.Repo, cl
 			continue
 		}
 		msg := digest.Render(tasks, from, to)
-		if err := client.SendMessage(ctx, chatID, msg); err != nil {
+		_, err = client.SendMessage(ctx, chatID, msg)
+		if err != nil {
 			slog.Error("digest send", "err", err)
 			continue
 		}
