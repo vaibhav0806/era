@@ -46,6 +46,14 @@ func TestQueue_TaskStatus_Found(t *testing.T) {
 	require.Equal(t, "queued", s)
 }
 
+func TestQueue_CreateAskTask_ReturnsID(t *testing.T) {
+	ctx := context.Background()
+	q, _ := newQueue(t)
+	id, err := q.CreateAskTask(ctx, "what is in foo", "owner/repo")
+	require.NoError(t, err)
+	require.Greater(t, id, int64(0))
+}
+
 func TestQueue_ListRecent(t *testing.T) {
 	ctx := context.Background()
 	q, _ := newQueue(t)

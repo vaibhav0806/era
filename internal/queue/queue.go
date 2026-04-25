@@ -128,6 +128,14 @@ func (q *Queue) SetNotifier(n Notifier) { q.notifier = n }
 
 func (q *Queue) SetProgressNotifier(p ProgressNotifier) { q.progressNotifier = p }
 
+func (q *Queue) CreateAskTask(ctx context.Context, desc, targetRepo string) (int64, error) {
+	task, err := q.repo.CreateAskTask(ctx, desc, targetRepo)
+	if err != nil {
+		return 0, fmt.Errorf("create ask task: %w", err)
+	}
+	return task.ID, nil
+}
+
 func (q *Queue) CreateTask(ctx context.Context, desc, targetRepo, profile string) (int64, error) {
 	if profile == "" {
 		profile = "default"
