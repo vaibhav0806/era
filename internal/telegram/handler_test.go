@@ -33,6 +33,10 @@ type stubOps struct {
 	nextID   int64
 	lastRepo string
 	lastDesc string
+
+	// AK-3: ask routing
+	lastAskRepo string
+	lastAskDesc string
 }
 
 func (s *stubOps) CreateTask(ctx context.Context, desc, targetRepo, profile string) (int64, error) {
@@ -77,6 +81,12 @@ func (s *stubOps) RetryTask(ctx context.Context, id int64) (int64, error) {
 		return s.RetryNewID, nil
 	}
 	return id + 100, nil
+}
+
+func (s *stubOps) CreateAskTask(ctx context.Context, desc, targetRepo string) (int64, error) {
+	s.lastAskDesc = desc
+	s.lastAskRepo = targetRepo
+	return s.nextID, nil
 }
 
 // compile-time assertion that stubOps satisfies Ops
@@ -297,6 +307,30 @@ func TestHandler_ReplyToKnownMessage_QueuesThreadedTask(t *testing.T) {
 	require.Contains(t, ops.lastDesc, "now add tests")
 	require.Contains(t, f.Sent[0].Text, "task #99 queued")
 	require.Contains(t, f.Sent[0].Text, "reply to #")
+}
+
+func TestHandler_AskCommand_QueuesReadOnlyTask(t *testing.T) {
+	ctx := context.Background()
+	f := NewFakeClient()
+	ops := &stubOps{nextID: 42}
+	h := NewHandler(f, ops, nil, "vaibhav0806/sandbox")
+	err := h.Handle(ctx, Update{
+		ChatID: 1,
+		Text:   "/ask vaibhav0806/foo what is in main.go",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "vaibhav0806/foo", ops.lastAskRepo)
+	require.Equal(t, "what is in main.go", ops.lastAskDesc)
+	require.Contains(t, f.Sent[0].Text, "task #42 queued (ask")
+}
+
+func TestHandler_AskWithoutRepo_DMsUsage(t *testing.T) {
+	ctx := context.Background()
+	f := NewFakeClient()
+	h := NewHandler(f, &stubOps{}, nil, "vaibhav0806/sandbox")
+	err := h.Handle(ctx, Update{ChatID: 1, Text: "/ask just a question"})
+	require.NoError(t, err)
+	require.Contains(t, f.Sent[0].Text, "usage: /ask")
 }
 
 func TestHandler_ReplyWithCommandPrefix_FallsThroughToCommand(t *testing.T) {

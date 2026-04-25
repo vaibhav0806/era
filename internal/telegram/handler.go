@@ -37,6 +37,18 @@ func parseTaskArgs(s string) (repo, desc string) {
 	return "", s
 }
 
+var askRepoPattern = regexp.MustCompile(`^([\w.-]+/[\w.-]+)\s+(.+)$`)
+
+// parseAskArgs splits "/ask <owner>/<repo> <question>" args into (repo, desc).
+// Returns ("", "") if the format doesn't match.
+func parseAskArgs(args string) (repo, desc string) {
+	m := askRepoPattern.FindStringSubmatch(strings.TrimSpace(args))
+	if len(m) != 3 {
+		return "", ""
+	}
+	return m[1], m[2]
+}
+
 // ErrTaskNotFound is returned by Ops.TaskStatus when the task ID is unknown.
 var ErrTaskNotFound = errors.New("task not found")
 
@@ -52,6 +64,7 @@ type TaskSummary struct {
 // Task 10.
 type Ops interface {
 	CreateTask(ctx context.Context, desc, targetRepo, profile string) (int64, error)
+	CreateAskTask(ctx context.Context, desc, targetRepo string) (int64, error)
 	TaskStatus(ctx context.Context, id int64) (string, error)
 	ListRecent(ctx context.Context, limit int) ([]TaskSummary, error)
 	HandleApproval(ctx context.Context, data string) (replyText string, err error)
@@ -174,8 +187,30 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 		_, err = h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("retry queued as #%d (from #%d)", newID, id))
 		return err
 
+	case strings.HasPrefix(text, "/ask "):
+		args := strings.TrimSpace(strings.TrimPrefix(text, "/ask "))
+		repo, desc := parseAskArgs(args)
+		if repo == "" {
+			_, err := h.client.SendMessage(ctx, u.ChatID,
+				"usage: /ask <owner>/<repo> <question>")
+			return err
+		}
+		id, err := h.ops.CreateAskTask(ctx, desc, repo)
+		if err != nil {
+			_, err := h.client.SendMessage(ctx, u.ChatID, fmt.Sprintf("error: %v", err))
+			return err
+		}
+		_, err = h.client.SendMessage(ctx, u.ChatID,
+			fmt.Sprintf("task #%d queued (ask, repo: %s)", id, repo))
+		return err
+
+	case text == "/ask":
+		_, err := h.client.SendMessage(ctx, u.ChatID,
+			"usage: /ask <owner>/<repo> <question>")
+		return err
+
 	default:
-		_, err := h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list, /cancel, /retry")
+		_, err := h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /ask, /status, /list, /cancel, /retry")
 		return err
 	}
 }
