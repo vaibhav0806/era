@@ -6,6 +6,21 @@ A personal agent orchestrator that runs tasks via Telegram, executes them in dis
 
 *era* = **e**phemeral **r**untime **a**gent. Every task spawns a fresh disposable Docker container, does its work, and exits; no state lives longer than a single task run. The name also reflects the intent: this is the chapter where the typing gets delegated and the focus shifts to describing and reviewing. M0 lays down the chassis; later milestones swap in a real coding agent, network allowlisting, and approval gates.
 
+## Status: Milestone 6 — agent sharpness
+
+M6 makes era's agent loop sharper at finishing real tasks and easier to direct in flight:
+
+- **Per-task budget profiles.** `quick` (20 iter / $0.05 / 10 min), `default` (60 / $0.20 / 30 min), `deep` (120 / $1.00 / 60 min). Override per task via `/task --budget=deep <desc>`. Defaults bumped from M0's 30/$0.05/15min, which was too tight for real side projects.
+- **Smarter egress allowlist.** Added crates.io, jsdelivr/cdnjs/unpkg, fonts.googleapis.com, services.gradle.org, etc. New `PI_EGRESS_EXTRA` env var appends comma-separated hosts at runtime.
+- **Reply-to-continue.** Reply to a completion DM in Telegram → era queues a new task with the original task's branch, PR, and summary woven into the prompt. Migration 0008 stores the completion message ID per task.
+- **Mid-run progress DMs.** While Pi is working, era pins a message that edits per tool action: `task #N · iter 7 · write · $0.008`. Final completion DM is a new message — the progress one stays as a trace.
+- **`/ask <repo> <question>`.** Read-only shortcut. Same runner image + iptables sandbox, but Pi runs with `read,grep,find,ls` only, no commit, no push. ~15-30s to a prose answer in DM.
+- **`/stats`.** 3-column 24h/7d/30d summary: tasks, success rate, tokens, cost, queue depth.
+
+Telegram client API change: `SendMessage` now returns `(int64, error)` so the orchestrator can persist completion message IDs for reply lookups.
+
+Everything from M5 still applies.
+
 ## Status: Milestone 5 — polish + safety
 
 M5 sharpens the production era install that shipped in M4 and adds the safety rails around it:
@@ -163,4 +178,5 @@ docs/superpowers/plans # implementation plans (M0 and beyond)
 - **M3 — approvals + digest**: inline Telegram approval buttons, approval state machine, EOD digest generator
 - **M3.5 — multi-repo**: per-task `target_repo`, `/task <owner>/<repo> <desc>` syntax
 - **M4 — deployment + PRs + cancel + prose**: Hetzner VPS via `deploy/install.sh` + `make deploy`, PR-per-task on clean/flagged paths, mid-run `/cancel` via docker kill, Pi's actual text in DMs
-- **M5 — polish + safety** ← you are here: GitHub Actions CI + auto-deploy, offsite B2 backups, pre-commit test gate, PR approval feedback (label + comment), runner tooling bake (Python/Rust/Go + build deps), wildcarded sudoers, Bearer auth normalization
+- **M5 — polish + safety**: GitHub Actions CI + auto-deploy, offsite B2 backups, pre-commit test gate, PR approval feedback (label + comment), runner tooling bake (Python/Rust/Go + build deps), wildcarded sudoers, Bearer auth normalization
+- **M6 — agent sharpness** ← you are here: per-task budget profiles + bumped caps, smarter egress allowlist, reply-to-continue, mid-run progress DMs, /ask read-only, /stats activity summary
