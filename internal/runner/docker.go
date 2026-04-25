@@ -50,6 +50,7 @@ type RunInput struct {
 	MaxIter       int    // M6 AG: per-task override; 0 = use d.MaxIterations
 	MaxCents      int    // 0 = use d.MaxCostCents
 	MaxWallSec    int    // 0 = use d.MaxWallSeconds
+	ReadOnly      bool   // M6 AK: skip commit, restrict Pi tools
 }
 
 // RunOutput is the parsed result of a successful container run.
@@ -95,8 +96,11 @@ func (d *Docker) BuildDockerArgs(in RunInput) []string {
 		"-e", fmt.Sprintf("ERA_MAX_COST_CENTS=%d", maxCents),
 		"-e", fmt.Sprintf("ERA_MAX_ITERATIONS=%d", maxIter),
 		"-e", fmt.Sprintf("ERA_MAX_WALL_SECONDS=%d", maxWall),
-		d.Image,
 	)
+	if in.ReadOnly {
+		args = append(args, "-e", "ERA_READ_ONLY=1")
+	}
+	args = append(args, d.Image)
 	return args
 }
 

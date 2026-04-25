@@ -39,7 +39,7 @@ type DiffSource interface {
 // by the container; implementations may ignore it (pass nil internally).
 type Runner interface {
 	Run(ctx context.Context, taskID int64, description string, ghToken string, repo string,
-		maxIter, maxCents, maxWallSec int, onProgress progress.Callback) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
+		maxIter, maxCents, maxWallSec int, readOnly bool, onProgress progress.Callback) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
 // NeedsReviewArgs bundles the approval-DM payload. Lives in queue so tests
@@ -227,8 +227,9 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 		}
 	}
 
+	readOnly := t.ReadOnly == 1
 	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken, effectiveRepo,
-		profile.MaxIter, profile.MaxCents, profile.MaxWallSec, progressCB)
+		profile.MaxIter, profile.MaxCents, profile.MaxWallSec, readOnly, progressCB)
 	if runErr != nil {
 		if q.running != nil && q.running.WasKilled(t.ID) {
 			q.running.ClearKilled(t.ID)

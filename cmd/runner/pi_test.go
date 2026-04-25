@@ -128,7 +128,7 @@ func TestNewRealPi_Flags(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	p, err := newRealPi(ctx, "moonshotai/kimi-k2.6", "/tmp", "say hi")
+	p, err := newRealPi(ctx, "moonshotai/kimi-k2.6", "/tmp", "say hi", "read,write,edit,grep,find,ls,bash")
 	require.NoError(t, err)
 
 	args := p.cmd.Args

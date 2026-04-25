@@ -127,12 +127,12 @@ type realPi struct {
 	stderr io.ReadCloser
 }
 
-func newRealPi(ctx context.Context, model, workdir, prompt string) (*realPi, error) {
+func newRealPi(ctx context.Context, model, workdir, prompt, tools string) (*realPi, error) {
 	cmd := exec.CommandContext(ctx, "pi",
 		"--mode", "json",
 		"--provider", "openrouter",
 		"--model", model,
-		"--tools", "read,write,edit,grep,find,ls,bash",
+		"--tools", tools,
 		prompt,
 	)
 	cmd.Dir = workdir // Pi uses process CWD as session CWD; pass explicitly.

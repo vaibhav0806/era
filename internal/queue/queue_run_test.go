@@ -30,10 +30,11 @@ type fakeRunner struct {
 	lastMaxIter    int
 	lastMaxCents   int
 	lastMaxWallSec int
+	lastReadOnly   bool
 	progressEvents []progress.Event
 }
 
-func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string, repo string, maxIter, maxCents, maxWallSec int, onProgress progress.Callback) (string, string, int64, int, []audit.Entry, error) {
+func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string, repo string, maxIter, maxCents, maxWallSec int, readOnly bool, onProgress progress.Callback) (string, string, int64, int, []audit.Entry, error) {
 	f.calls++
 	f.lastID = taskID
 	f.lastDes = desc
@@ -42,6 +43,7 @@ func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken
 	f.lastMaxIter = maxIter
 	f.lastMaxCents = maxCents
 	f.lastMaxWallSec = maxWallSec
+	f.lastReadOnly = readOnly
 	for _, ev := range f.progressEvents {
 		if onProgress != nil {
 			onProgress(ev)

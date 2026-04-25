@@ -53,8 +53,15 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	// sandbox; not a concern for M1.)
 	c := newCaps(ctx, *cfg)
 
+	readOnly := os.Getenv("ERA_READ_ONLY") == "1"
+
+	piTools := "read,write,edit,grep,find,ls,bash"
+	if readOnly {
+		piTools = "read,grep,find,ls"
+	}
+
 	prompt := composePrompt(cfg.TaskDescription)
-	p, err := newRealPi(ctx, cfg.PiModel, workspace, prompt)
+	p, err := newRealPi(ctx, cfg.PiModel, workspace, prompt, piTools)
 	if err != nil {
 		return fmt.Errorf("pi spawn: %w", err)
 	}
@@ -82,6 +89,19 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	// and we don't want partial work landing on the sandbox.
 	if errors.Is(piErr, errCapExceeded) {
 		return piErr
+	}
+
+	if readOnly {
+		writeResult(os.Stdout, runResult{
+			Branch:    "",
+			Summary:   finalSummary(summary, piErr),
+			Tokens:    tokens,
+			CostCents: int(math.Round(costUSD * 100)),
+		})
+		if piErr != nil {
+			return piErr
+		}
+		return nil
 	}
 
 	// M5 AD-3: pre-commit test gate. If repo has a `Makefile` with a `test`

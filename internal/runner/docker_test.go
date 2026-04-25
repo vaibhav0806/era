@@ -168,6 +168,24 @@ func TestStreamToWithProgress_MalformedJSON_Ignored(t *testing.T) {
 	require.Equal(t, 0, called)
 }
 
+func TestBuildDockerArgs_ReadOnlyEmitsEnv(t *testing.T) {
+	d := &runner.Docker{Image: "test:v1"}
+	in := runner.RunInput{TaskID: 1, Repo: "o/r", ReadOnly: true}
+	args := d.BuildDockerArgs(in)
+	requireEnvSet(t, args, "ERA_READ_ONLY=1")
+}
+
+func TestBuildDockerArgs_NotReadOnlyOmitsEnv(t *testing.T) {
+	d := &runner.Docker{Image: "test:v1"}
+	in := runner.RunInput{TaskID: 1, Repo: "o/r"}
+	args := d.BuildDockerArgs(in)
+	for i, a := range args {
+		if a == "-e" && i+1 < len(args) && strings.HasPrefix(args[i+1], "ERA_READ_ONLY") {
+			t.Fatalf("ERA_READ_ONLY should be absent when ReadOnly=false; args: %v", args)
+		}
+	}
+}
+
 func requireEnvSet(t *testing.T, args []string, want string) {
 	t.Helper()
 	for i, a := range args {
