@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -71,6 +72,12 @@ func NewHandler(c Client, ops Ops, repo *db.Repo, sandboxRepo string) *Handler {
 }
 
 func (h *Handler) Handle(ctx context.Context, u Update) error {
+	// M6 AI: reply-to-continue. A non-command text message with ReplyToMessageID
+	// threads a follow-up task off the original. Commands always win.
+	if u.ReplyToMessageID != 0 && u.Callback == nil && !strings.HasPrefix(u.Text, "/") {
+		return h.handleReply(ctx, u)
+	}
+
 	// M3: callback queries (button taps)
 	if u.Callback != nil {
 		return h.handleCallback(ctx, u)
@@ -170,6 +177,52 @@ func (h *Handler) Handle(ctx context.Context, u Update) error {
 		_, err := h.client.SendMessage(ctx, u.ChatID, "unknown command. try /task, /status, /list, /cancel, /retry")
 		return err
 	}
+}
+
+func (h *Handler) handleReply(ctx context.Context, u Update) error {
+	orig, err := h.repo.GetTaskByCompletionMessageID(ctx, int64(u.ReplyToMessageID))
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err := h.client.SendMessage(ctx, u.ChatID,
+			"sorry, couldn't find the task you're replying to")
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("get task by message id: %w", err)
+	}
+	prompt := composeReplyPrompt(orig, u.Text)
+	targetRepo := orig.TargetRepo
+	if targetRepo == "" {
+		targetRepo = h.sandboxRepo
+	}
+	id, err := h.ops.CreateTask(ctx, prompt, targetRepo, "default")
+	if err != nil {
+		return fmt.Errorf("queue reply task: %w", err)
+	}
+	_, err = h.client.SendMessage(ctx, u.ChatID,
+		fmt.Sprintf("task #%d queued (reply to #%d, repo: %s)", id, orig.ID, targetRepo))
+	return err
+}
+
+// composeReplyPrompt builds the prompt for a reply-threaded task.
+// Mirrors queue.ComposeReplyPrompt — inlined here to avoid an import cycle
+// (queue imports telegram; telegram cannot import queue).
+func composeReplyPrompt(orig db.Task, replyBody string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "You previously completed task #%d: %q\n", orig.ID, orig.Description)
+	if orig.BranchName.Valid && orig.BranchName.String != "" {
+		fmt.Fprintf(&b, "You made changes on branch %s.\n", orig.BranchName.String)
+	}
+	if orig.PrNumber.Valid {
+		fmt.Fprintf(&b, "The pull request is #%d.\n", orig.PrNumber.Int64)
+	}
+	if orig.Summary.Valid && strings.TrimSpace(orig.Summary.String) != "" {
+		fmt.Fprintf(&b, "\nSummary of what you did:\n%s\n", orig.Summary.String)
+	}
+	if orig.Status == "failed" && orig.Error.Valid {
+		fmt.Fprintf(&b, "\nThat task failed with: %s\n", orig.Error.String)
+	}
+	fmt.Fprintf(&b, "\nNow the user has a follow-up: %s", replyBody)
+	return b.String()
 }
 
 func (h *Handler) handleCallback(ctx context.Context, u Update) error {

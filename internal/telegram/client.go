@@ -26,10 +26,11 @@ type CallbackQuery struct {
 // tgbotapi library so we can swap libraries or fake it in tests without
 // touching handler code.
 type Update struct {
-	UserID   int64
-	ChatID   int64
-	Text     string         // set for text messages; empty for callback updates
-	Callback *CallbackQuery // set for button-tap updates; nil for text
+	UserID           int64
+	ChatID           int64
+	Text             string         // set for text messages; empty for callback updates
+	Callback         *CallbackQuery // set for button-tap updates; nil for text
+	ReplyToMessageID int            // set when this message is a reply (Telegram message ID being replied to); 0 otherwise
 }
 
 type Client interface {
@@ -142,10 +143,15 @@ func (c *realClient) Updates(ctx context.Context) (<-chan Update, error) {
 					// Silently drop messages from any other user.
 					continue
 				}
+				replyTo := 0
+				if up.Message.ReplyToMessage != nil {
+					replyTo = up.Message.ReplyToMessage.MessageID
+				}
 				out <- Update{
-					UserID: up.Message.From.ID,
-					ChatID: up.Message.Chat.ID,
-					Text:   up.Message.Text,
+					UserID:           up.Message.From.ID,
+					ChatID:           up.Message.Chat.ID,
+					Text:             up.Message.Text,
+					ReplyToMessageID: replyTo,
 				}
 			}
 		}

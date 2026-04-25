@@ -3,10 +3,12 @@ package telegram
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vaibhav0806/era/internal/db"
 )
 
 // stubOps records calls instead of touching a real DB.
@@ -26,12 +28,22 @@ type stubOps struct {
 	RetriedIDs       []int64
 	RetryNewID       int64
 	RetryErr         error
+
+	// AI-6: reply routing
+	nextID   int64
+	lastRepo string
+	lastDesc string
 }
 
 func (s *stubOps) CreateTask(ctx context.Context, desc, targetRepo, profile string) (int64, error) {
 	s.Created = append(s.Created, desc)
 	s.LastCreatedRepo = targetRepo
 	s.LastProfile = profile
+	s.lastRepo = targetRepo
+	s.lastDesc = desc
+	if s.nextID != 0 {
+		return s.nextID, nil
+	}
 	return int64(len(s.Created)), nil
 }
 func (s *stubOps) TaskStatus(ctx context.Context, id int64) (string, error) {
@@ -239,4 +251,63 @@ func TestHandler_TaskCommand_WithoutRepo_UsesDefault(t *testing.T) {
 	require.Equal(t, []string{"add a file"}, ops.Created)
 	require.Equal(t, "", ops.LastCreatedRepo)
 	require.NotContains(t, fc.Sent[0].Text, "repo:")
+}
+
+func newInMemRepo(t *testing.T) *db.Repo {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "test.db")
+	h, err := db.Open(context.Background(), path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	return db.NewRepo(h)
+}
+
+func TestHandler_ReplyToUnknownMessage_DMsNotFound(t *testing.T) {
+	ctx := context.Background()
+	f := NewFakeClient()
+	h := NewHandler(f, &stubOps{}, newInMemRepo(t), "vaibhav0806/sandbox")
+	err := h.Handle(ctx, Update{
+		ChatID:           1,
+		Text:             "now add tests",
+		ReplyToMessageID: 99999, // nothing in DB matches
+	})
+	require.NoError(t, err)
+	require.Len(t, f.Sent, 1)
+	require.Contains(t, f.Sent[0].Text, "couldn't find")
+}
+
+func TestHandler_ReplyToKnownMessage_QueuesThreadedTask(t *testing.T) {
+	ctx := context.Background()
+	repo := newInMemRepo(t)
+	task, err := repo.CreateTask(ctx, "build a thing", "vaibhav0806/foo", "default")
+	require.NoError(t, err)
+	require.NoError(t, repo.SetCompletionMessageID(ctx, task.ID, 12345))
+
+	f := NewFakeClient()
+	ops := &stubOps{nextID: 99}
+	h := NewHandler(f, ops, repo, "vaibhav0806/sandbox")
+	err = h.Handle(ctx, Update{
+		ChatID:           1,
+		Text:             "now add tests",
+		ReplyToMessageID: 12345,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "vaibhav0806/foo", ops.lastRepo)
+	require.Contains(t, ops.lastDesc, "previously completed task #")
+	require.Contains(t, ops.lastDesc, "now add tests")
+	require.Contains(t, f.Sent[0].Text, "task #99 queued")
+	require.Contains(t, f.Sent[0].Text, "reply to #")
+}
+
+func TestHandler_ReplyWithCommandPrefix_FallsThroughToCommand(t *testing.T) {
+	ctx := context.Background()
+	f := NewFakeClient()
+	h := NewHandler(f, &stubOps{}, newInMemRepo(t), "vaibhav0806/sandbox")
+	err := h.Handle(ctx, Update{
+		ChatID:           1,
+		Text:             "/list",
+		ReplyToMessageID: 12345,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, f.Sent[0].Text, "couldn't find")
 }
