@@ -35,9 +35,9 @@ type Config struct {
 const (
 	defaultPiModel              = "moonshotai/kimi-k2.6"
 	defaultMaxTokensPerTask     = 500_000
-	defaultMaxCostCentsPerTask  = 50 // $0.50 USD
-	defaultMaxIterationsPerTask = 30
-	defaultMaxWallClockSeconds  = 900 // 15 min
+	defaultMaxCostCentsPerTask  = 20   // M6 AG: 20 cents matches budget.Profiles["default"].MaxCents
+	defaultMaxIterationsPerTask = 60   // M6 AG: 60 iter matches budget.Profiles["default"].MaxIter
+	defaultMaxWallClockSeconds  = 1800 // M6 AG: 30 min matches budget.Profiles["default"].MaxWallSec
 )
 
 func Load() (*Config, error) {

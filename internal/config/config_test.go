@@ -77,9 +77,9 @@ func TestLoad_DefaultsForOptional(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "moonshotai/kimi-k2.6", cfg.PiModel)
 	require.Equal(t, 500000, cfg.MaxTokensPerTask)
-	require.Equal(t, 50, cfg.MaxCostCentsPerTask)
-	require.Equal(t, 30, cfg.MaxIterationsPerTask)
-	require.Equal(t, 900, cfg.MaxWallClockSeconds)
+	require.Equal(t, 20, cfg.MaxCostCentsPerTask)
+	require.Equal(t, 60, cfg.MaxIterationsPerTask)
+	require.Equal(t, 1800, cfg.MaxWallClockSeconds)
 }
 
 func TestLoad_MissingOpenRouterKey(t *testing.T) {
