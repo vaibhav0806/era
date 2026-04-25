@@ -83,17 +83,32 @@ type PRCreator interface {
 	AddComment(ctx context.Context, repo string, number int, body string) error
 }
 
+// ProgressEvent is the queue-layer counterpart to progress.Event.
+// We re-declare here so callers (e.g., tgNotifier in cmd/orchestrator) can
+// implement queue.ProgressNotifier without depending on internal/progress.
+type ProgressEvent struct {
+	Iter      int
+	Action    string
+	Tokens    int64
+	CostCents int
+}
+
+type ProgressNotifier interface {
+	NotifyProgress(ctx context.Context, taskID int64, ev ProgressEvent)
+}
+
 type Queue struct {
-	repo          *db.Repo
-	runner        Runner
-	notifier      Notifier
-	tokens        TokenSource     // may be nil
-	compare       DiffSource      // may be nil
-	repoFQN       string          // owner/repo for compare lookups
-	branchDeleter BranchDeleter   // may be nil
-	prCreator     PRCreator       // may be nil
-	killer        ContainerKiller // may be nil
-	running       *RunningSet     // initialized in New
+	repo             *db.Repo
+	runner           Runner
+	notifier         Notifier
+	progressNotifier ProgressNotifier
+	tokens           TokenSource     // may be nil
+	compare          DiffSource      // may be nil
+	repoFQN          string          // owner/repo for compare lookups
+	branchDeleter    BranchDeleter   // may be nil
+	prCreator        PRCreator       // may be nil
+	killer           ContainerKiller // may be nil
+	running          *RunningSet     // initialized in New
 }
 
 func New(repo *db.Repo, runner Runner, tokens TokenSource, compare DiffSource, repoFQN string) *Queue {
@@ -110,6 +125,8 @@ func New(repo *db.Repo, runner Runner, tokens TokenSource, compare DiffSource, r
 // SetNotifier attaches a Notifier to this Queue. Safe to call once at
 // startup; do not change mid-flight — RunNext reads the field without a lock.
 func (q *Queue) SetNotifier(n Notifier) { q.notifier = n }
+
+func (q *Queue) SetProgressNotifier(p ProgressNotifier) { q.progressNotifier = p }
 
 func (q *Queue) CreateTask(ctx context.Context, desc, targetRepo, profile string) (int64, error) {
 	if profile == "" {
@@ -192,10 +209,14 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 	}
 
 	progressCB := func(ev progress.Event) {
-		// AJ-5 wires this to a ProgressNotifier interface; for AJ-4 the
-		// callback is plumbed in but receives no events because no notifier
-		// is set. AJ-5 introduces queue.ProgressNotifier.
-		_ = ev
+		if q.progressNotifier != nil {
+			q.progressNotifier.NotifyProgress(ctx, t.ID, ProgressEvent{
+				Iter:      ev.Iter,
+				Action:    ev.Action,
+				Tokens:    ev.Tokens,
+				CostCents: ev.CostCents,
+			})
+		}
 	}
 
 	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken, effectiveRepo,

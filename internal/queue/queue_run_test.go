@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,7 @@ type fakeRunner struct {
 	lastMaxIter    int
 	lastMaxCents   int
 	lastMaxWallSec int
+	progressEvents []progress.Event
 }
 
 func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string, repo string, maxIter, maxCents, maxWallSec int, onProgress progress.Callback) (string, string, int64, int, []audit.Entry, error) {
@@ -40,6 +42,11 @@ func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken
 	f.lastMaxIter = maxIter
 	f.lastMaxCents = maxCents
 	f.lastMaxWallSec = maxWallSec
+	for _, ev := range f.progressEvents {
+		if onProgress != nil {
+			onProgress(ev)
+		}
+	}
 	return f.branch, f.summary, f.tokens, f.costCents, f.audits, f.err
 }
 
@@ -673,4 +680,43 @@ func TestQueue_RunNext_DeepProfilePassesThroughCaps(t *testing.T) {
 	require.Equal(t, 120, fr.lastMaxIter)
 	require.Equal(t, 100, fr.lastMaxCents)
 	require.Equal(t, 3600, fr.lastMaxWallSec)
+}
+
+type fakeProgressNotifier struct {
+	mu     sync.Mutex
+	events []struct {
+		TaskID int64
+		Ev     queue.ProgressEvent
+	}
+}
+
+func (f *fakeProgressNotifier) NotifyProgress(ctx context.Context, taskID int64, ev queue.ProgressEvent) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, struct {
+		TaskID int64
+		Ev     queue.ProgressEvent
+	}{taskID, ev})
+}
+
+func TestQueue_RunNext_FiresProgress(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{
+		branch:  "agent/1/x",
+		summary: "ok",
+		progressEvents: []progress.Event{
+			{Iter: 1, Action: "read", Tokens: 200, CostCents: 0},
+			{Iter: 2, Action: "write", Tokens: 500, CostCents: 1},
+		},
+	}
+	q, repo := newRunQueue(t, fr)
+	pn := &fakeProgressNotifier{}
+	q.SetProgressNotifier(pn)
+	_, err := repo.CreateTask(ctx, "x", "", "default")
+	require.NoError(t, err)
+	_, err = q.RunNext(ctx)
+	require.NoError(t, err)
+	require.Len(t, pn.events, 2)
+	require.Equal(t, "read", pn.events[0].Ev.Action)
+	require.Equal(t, "write", pn.events[1].Ev.Action)
 }
