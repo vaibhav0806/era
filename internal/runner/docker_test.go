@@ -93,3 +93,48 @@ func TestBuildDockerArgs_OmitsNameWhenBlank(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDockerArgs_PerTaskCapsOverrideDefaults(t *testing.T) {
+	d := &runner.Docker{
+		Image:          "test:v1",
+		MaxIterations:  30,
+		MaxCostCents:   5,
+		MaxWallSeconds: 600,
+	}
+	in := runner.RunInput{
+		TaskID:      1,
+		Repo:        "o/r",
+		Description: "x",
+		MaxIter:     120,
+		MaxCents:    100,
+		MaxWallSec:  3600,
+	}
+	args := d.BuildDockerArgs(in)
+	requireEnvSet(t, args, "ERA_MAX_ITERATIONS=120")
+	requireEnvSet(t, args, "ERA_MAX_COST_CENTS=100")
+	requireEnvSet(t, args, "ERA_MAX_WALL_SECONDS=3600")
+}
+
+func TestBuildDockerArgs_ZeroFieldsFallBackToDocker(t *testing.T) {
+	d := &runner.Docker{
+		Image:          "test:v1",
+		MaxIterations:  60,
+		MaxCostCents:   20,
+		MaxWallSeconds: 1800,
+	}
+	in := runner.RunInput{TaskID: 1, Repo: "o/r"}
+	args := d.BuildDockerArgs(in)
+	requireEnvSet(t, args, "ERA_MAX_ITERATIONS=60")
+	requireEnvSet(t, args, "ERA_MAX_COST_CENTS=20")
+	requireEnvSet(t, args, "ERA_MAX_WALL_SECONDS=1800")
+}
+
+func requireEnvSet(t *testing.T, args []string, want string) {
+	t.Helper()
+	for i, a := range args {
+		if a == "-e" && i+1 < len(args) && args[i+1] == want {
+			return
+		}
+	}
+	t.Fatalf("expected %s in args; got: %v", want, args)
+}

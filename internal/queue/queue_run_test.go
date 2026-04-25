@@ -14,25 +14,31 @@ import (
 )
 
 type fakeRunner struct {
-	branch    string
-	summary   string
-	tokens    int64
-	costCents int
-	audits    []audit.Entry
-	err       error
-	calls     int
-	lastID    int64
-	lastDes   string
-	lastToken string
-	lastRepo  string
+	branch         string
+	summary        string
+	tokens         int64
+	costCents      int
+	audits         []audit.Entry
+	err            error
+	calls          int
+	lastID         int64
+	lastDes        string
+	lastToken      string
+	lastRepo       string
+	lastMaxIter    int
+	lastMaxCents   int
+	lastMaxWallSec int
 }
 
-func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string, repo string) (string, string, int64, int, []audit.Entry, error) {
+func (f *fakeRunner) Run(ctx context.Context, taskID int64, desc string, ghToken string, repo string, maxIter, maxCents, maxWallSec int) (string, string, int64, int, []audit.Entry, error) {
 	f.calls++
 	f.lastID = taskID
 	f.lastDes = desc
 	f.lastToken = ghToken
 	f.lastRepo = repo
+	f.lastMaxIter = maxIter
+	f.lastMaxCents = maxCents
+	f.lastMaxWallSec = maxWallSec
 	return f.branch, f.summary, f.tokens, f.costCents, f.audits, f.err
 }
 
@@ -653,4 +659,17 @@ func TestQueue_RunNext_FallsBackToDefaultRepo(t *testing.T) {
 	_, err := q.RunNext(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "default/repo", fr.lastRepo, "empty TargetRepo falls back to default")
+}
+
+func TestQueue_RunNext_DeepProfilePassesThroughCaps(t *testing.T) {
+	ctx := context.Background()
+	fr := &fakeRunner{branch: "agent/1/x", summary: "s"}
+	q, repo := newRunQueue(t, fr)
+	_, err := repo.CreateTask(ctx, "x", "", "deep")
+	require.NoError(t, err)
+	_, err = q.RunNext(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 120, fr.lastMaxIter)
+	require.Equal(t, 100, fr.lastMaxCents)
+	require.Equal(t, 3600, fr.lastMaxWallSec)
 }

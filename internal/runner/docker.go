@@ -40,6 +40,9 @@ type RunInput struct {
 	GitHubToken   string // per-task installation token (or classic PAT as fallback)
 	Repo          string // per-invocation override; empty falls back to d.SandboxRepo
 	ContainerName string // when non-empty, passed as --name to docker run
+	MaxIter       int    // M6 AG: per-task override; 0 = use d.MaxIterations
+	MaxCents      int    // 0 = use d.MaxCostCents
+	MaxWallSec    int    // 0 = use d.MaxWallSeconds
 }
 
 // RunOutput is the parsed result of a successful container run.
@@ -59,6 +62,19 @@ func (d *Docker) BuildDockerArgs(in RunInput) []string {
 	if in.ContainerName != "" {
 		args = append(args, "--name", in.ContainerName)
 	}
+	maxIter := d.MaxIterations
+	if in.MaxIter > 0 {
+		maxIter = in.MaxIter
+	}
+	maxCents := d.MaxCostCents
+	if in.MaxCents > 0 {
+		maxCents = in.MaxCents
+	}
+	maxWall := d.MaxWallSeconds
+	if in.MaxWallSec > 0 {
+		maxWall = in.MaxWallSec
+	}
+
 	args = append(args,
 		"--cap-add=NET_ADMIN", // for iptables inside container
 		"--cap-add=NET_RAW",   // for REJECT --reject-with tcp-reset
@@ -69,9 +85,9 @@ func (d *Docker) BuildDockerArgs(in RunInput) []string {
 		"-e", fmt.Sprintf("PI_SIDECAR_OPENROUTER_API_KEY=%s", d.OpenRouterAPIKey),
 		"-e", fmt.Sprintf("ERA_PI_MODEL=%s", d.PiModel),
 		"-e", fmt.Sprintf("ERA_MAX_TOKENS=%d", d.MaxTokens),
-		"-e", fmt.Sprintf("ERA_MAX_COST_CENTS=%d", d.MaxCostCents),
-		"-e", fmt.Sprintf("ERA_MAX_ITERATIONS=%d", d.MaxIterations),
-		"-e", fmt.Sprintf("ERA_MAX_WALL_SECONDS=%d", d.MaxWallSeconds),
+		"-e", fmt.Sprintf("ERA_MAX_COST_CENTS=%d", maxCents),
+		"-e", fmt.Sprintf("ERA_MAX_ITERATIONS=%d", maxIter),
+		"-e", fmt.Sprintf("ERA_MAX_WALL_SECONDS=%d", maxWall),
 		d.Image,
 	)
 	return args

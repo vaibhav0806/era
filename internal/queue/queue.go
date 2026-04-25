@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/vaibhav0806/era/internal/audit"
+	"github.com/vaibhav0806/era/internal/budget"
 	"github.com/vaibhav0806/era/internal/db"
 	"github.com/vaibhav0806/era/internal/diffscan"
 	"github.com/vaibhav0806/era/internal/githubpr"
@@ -31,9 +32,12 @@ type DiffSource interface {
 
 // Runner executes a task. ghToken is a per-task GitHub installation token
 // (or empty string if no TokenSource is configured). repo is the resolved
-// target repo (owner/repo) for this task.
+// target repo (owner/repo) for this task. maxIter/maxCents/maxWallSec are
+// per-task cap overrides resolved from the budget profile; 0 means use the
+// runner's own defaults.
 type Runner interface {
-	Run(ctx context.Context, taskID int64, description string, ghToken string, repo string) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
+	Run(ctx context.Context, taskID int64, description string, ghToken string, repo string,
+		maxIter, maxCents, maxWallSec int) (branch, summary string, tokens int64, costCents int, audits []audit.Entry, err error)
 }
 
 // NeedsReviewArgs bundles the approval-DM payload. Lives in queue so tests
@@ -180,7 +184,13 @@ func (q *Queue) RunNext(ctx context.Context) (bool, error) {
 		ghToken = tok
 	}
 
-	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken, effectiveRepo)
+	profile := budget.Profiles[t.BudgetProfile]
+	if profile.Name == "" {
+		profile = budget.Profiles["default"] // unknown stored profile; safe fallback
+	}
+
+	branch, summary, tokens, costCents, audits, runErr := q.runner.Run(ctx, t.ID, t.Description, ghToken, effectiveRepo,
+		profile.MaxIter, profile.MaxCents, profile.MaxWallSec)
 	if runErr != nil {
 		if q.running != nil && q.running.WasKilled(t.ID) {
 			q.running.ClearKilled(t.ID)
