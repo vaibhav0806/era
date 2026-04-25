@@ -60,7 +60,15 @@ func run(ctx context.Context, cfg *runnerConfig) error {
 	}
 
 	slog.Info("running pi", "model", cfg.PiModel)
-	summary, piErr := runPi(ctx, p, c, nil)
+	onProgress := func(iter int, action string, tokens int64, costUSD float64) {
+		writeProgress(os.Stdout, runProgress{
+			Iter:      iter,
+			Action:    action,
+			Tokens:    tokens,
+			CostCents: int(math.Round(costUSD * 100)),
+		})
+	}
+	summary, piErr := runPi(ctx, p, c, onProgress)
 
 	// Even on error, record what we spent and try to push whatever Pi wrote
 	// so the branch is inspectable next morning.
