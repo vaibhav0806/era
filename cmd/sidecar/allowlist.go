@@ -20,7 +20,12 @@ var staticHosts = []string{
 	"registry.npmjs.org", ".npmjs.org",
 	"pypi.org", "files.pythonhosted.org",
 	"proxy.golang.org", "sum.golang.org", "storage.googleapis.com",
-	"crates.io", "static.crates.io",
+	"crates.io", "static.crates.io", "index.crates.io",
+	// M6 AH: common dev ecosystem hosts
+	"registry.yarnpkg.com",
+	"cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com",
+	"fonts.googleapis.com", "fonts.gstatic.com",
+	"services.gradle.org",
 	// Doc hosts (low-noise, high-value)
 	"developer.mozilla.org", "docs.python.org",
 	"pkg.go.dev", "go.dev",
