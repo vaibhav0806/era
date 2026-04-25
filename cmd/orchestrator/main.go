@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -108,12 +109,14 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	q.SetNotifier(&tgNotifier{
+	notifier := &tgNotifier{
 		client:      client,
 		chatID:      cfg.TelegramAllowedUserID,
 		sandboxRepo: cfg.GitHubSandboxRepo,
 		repo:        repo,
-	})
+	}
+	q.SetNotifier(notifier)
+	q.SetProgressNotifier(notifier)
 	handler := telegram.NewHandler(client, q, repo, cfg.GitHubSandboxRepo)
 
 	updates, err := client.Updates(ctx)
@@ -173,10 +176,11 @@ func fail(err error) {
 }
 
 type tgNotifier struct {
-	client      telegram.Client
-	chatID      int64
-	sandboxRepo string   // "owner/repo"
-	repo        *db.Repo // for SetCompletionMessageID
+	client       telegram.Client
+	chatID       int64
+	sandboxRepo  string   // "owner/repo"
+	repo         *db.Repo // for SetCompletionMessageID
+	progressMsgs sync.Map // taskID (int64) → telegram message ID (int64)
 }
 
 func (n *tgNotifier) NotifyCompleted(ctx context.Context, id int64, repo, branch, prURL, summary string, tokens int64, costCents int) {
@@ -217,6 +221,24 @@ func (n *tgNotifier) NotifyCancelled(ctx context.Context, id int64) {
 	if err != nil {
 		slog.Error("notify cancelled", "err", err, "task", id)
 	}
+}
+
+func (n *tgNotifier) NotifyProgress(ctx context.Context, id int64, ev queue.ProgressEvent) {
+	body := fmt.Sprintf("task #%d · iter %d · %s · $%.3f",
+		id, ev.Iter, ev.Action, float64(ev.CostCents)/100.0)
+	if existing, ok := n.progressMsgs.Load(id); ok {
+		msgID := existing.(int64)
+		if err := n.client.EditMessageText(ctx, n.chatID, int(msgID), body); err != nil {
+			slog.Warn("edit progress", "err", err, "task", id)
+		}
+		return
+	}
+	msgID, err := n.client.SendMessage(ctx, n.chatID, body)
+	if err != nil {
+		slog.Warn("send progress", "err", err, "task", id)
+		return
+	}
+	n.progressMsgs.Store(id, msgID)
 }
 
 func (n *tgNotifier) NotifyNeedsReview(ctx context.Context, a queue.NeedsReviewArgs) {
@@ -313,8 +335,9 @@ func truncateForTelegram(s string, budget int) string {
 	return s[:cut] + fmt.Sprintf("\n…(%d bytes truncated)", len(s)-cut)
 }
 
-// compile-time assertion that tgNotifier satisfies queue.Notifier
-var _ queue.Notifier = (*tgNotifier)(nil)
+// compile-time assertions that tgNotifier satisfies both notifier interfaces
+var _ queue.Notifier         = (*tgNotifier)(nil)
+var _ queue.ProgressNotifier = (*tgNotifier)(nil)
 
 // runDigestScheduler fires once per day at hour:minute UTC and sends a
 // digest message to chatID. Respects ctx for graceful shutdown.
