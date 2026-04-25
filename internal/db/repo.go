@@ -99,3 +99,14 @@ func (r *Repo) SetBudgetProfile(ctx context.Context, id int64, profile string) e
 		ID:            id,
 	})
 }
+
+func (r *Repo) SetCompletionMessageID(ctx context.Context, id, msgID int64) error {
+	return r.q.SetCompletionMessageID(ctx, SetCompletionMessageIDParams{
+		CompletionMessageID: sql.NullInt64{Int64: msgID, Valid: true},
+		ID:                  id,
+	})
+}
+
+func (r *Repo) GetTaskByCompletionMessageID(ctx context.Context, msgID int64) (Task, error) {
+	return r.q.GetTaskByCompletionMessageID(ctx, sql.NullInt64{Int64: msgID, Valid: true})
+}

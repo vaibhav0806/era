@@ -57,3 +57,9 @@ UPDATE tasks
 
 -- name: SetBudgetProfile :exec
 UPDATE tasks SET budget_profile = ? WHERE id = ?;
+
+-- name: SetCompletionMessageID :exec
+UPDATE tasks SET completion_message_id = ? WHERE id = ?;
+
+-- name: GetTaskByCompletionMessageID :one
+SELECT * FROM tasks WHERE completion_message_id = ? LIMIT 1;

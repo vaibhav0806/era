@@ -186,3 +186,13 @@ func TestRepo_SetPRNumber_UpdatesColumn(t *testing.T) {
 	require.True(t, got.PrNumber.Valid)
 	require.Equal(t, int64(42), got.PrNumber.Int64)
 }
+
+func TestRepo_CompletionMessageID_RoundTrip(t *testing.T) {
+	repo := openTest(t)
+	task, err := repo.CreateTask(context.Background(), "test", "", "default")
+	require.NoError(t, err)
+	require.NoError(t, repo.SetCompletionMessageID(context.Background(), task.ID, 12345))
+	got, err := repo.GetTaskByCompletionMessageID(context.Background(), 12345)
+	require.NoError(t, err)
+	require.Equal(t, task.ID, got.ID)
+}

@@ -27,18 +27,19 @@ type Event struct {
 }
 
 type Task struct {
-	ID            int64          `json:"id"`
-	Description   string         `json:"description"`
-	Status        string         `json:"status"`
-	BranchName    sql.NullString `json:"branch_name"`
-	Summary       sql.NullString `json:"summary"`
-	Error         sql.NullString `json:"error"`
-	TokensUsed    int64          `json:"tokens_used"`
-	CostCents     int64          `json:"cost_cents"`
-	CreatedAt     time.Time      `json:"created_at"`
-	StartedAt     sql.NullTime   `json:"started_at"`
-	FinishedAt    sql.NullTime   `json:"finished_at"`
-	TargetRepo    string         `json:"target_repo"`
-	PrNumber      sql.NullInt64  `json:"pr_number"`
-	BudgetProfile string         `json:"budget_profile"`
+	ID                  int64          `json:"id"`
+	Description         string         `json:"description"`
+	Status              string         `json:"status"`
+	BranchName          sql.NullString `json:"branch_name"`
+	Summary             sql.NullString `json:"summary"`
+	Error               sql.NullString `json:"error"`
+	TokensUsed          int64          `json:"tokens_used"`
+	CostCents           int64          `json:"cost_cents"`
+	CreatedAt           time.Time      `json:"created_at"`
+	StartedAt           sql.NullTime   `json:"started_at"`
+	FinishedAt          sql.NullTime   `json:"finished_at"`
+	TargetRepo          string         `json:"target_repo"`
+	PrNumber            sql.NullInt64  `json:"pr_number"`
+	BudgetProfile       string         `json:"budget_profile"`
+	CompletionMessageID sql.NullInt64  `json:"completion_message_id"`
 }

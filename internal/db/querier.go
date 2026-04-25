@@ -15,6 +15,7 @@ type Querier interface {
 	// queries/tasks.sql
 	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
 	GetTask(ctx context.Context, id int64) (Task, error)
+	GetTaskByCompletionMessageID(ctx context.Context, completionMessageID sql.NullInt64) (Task, error)
 	ListEventsForTask(ctx context.Context, taskID int64) ([]Event, error)
 	ListRecentTasks(ctx context.Context, limit int64) ([]Task, error)
 	ListRunningTaskIDs(ctx context.Context) ([]int64, error)
@@ -23,6 +24,7 @@ type Querier interface {
 	MarkTaskCompleted(ctx context.Context, arg MarkTaskCompletedParams) error
 	MarkTaskFailed(ctx context.Context, arg MarkTaskFailedParams) error
 	SetBudgetProfile(ctx context.Context, arg SetBudgetProfileParams) error
+	SetCompletionMessageID(ctx context.Context, arg SetCompletionMessageIDParams) error
 	SetPRNumber(ctx context.Context, arg SetPRNumberParams) error
 	SetTaskStatus(ctx context.Context, arg SetTaskStatusParams) error
 }
